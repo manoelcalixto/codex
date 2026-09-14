@@ -32,8 +32,9 @@ use windows_sys::Win32::System::Pipes::GetNamedPipeServerProcessId;
 use windows_sys::Win32::System::Pipes::WaitNamedPipeW;
 use windows_sys::Win32::System::Services;
 
-const SERVICE_NAME: &str = "CodexSandboxService";
 const PROVISIONING_TIMEOUT: Duration = Duration::from_secs(120);
+
+mod group_change;
 
 impl WindowsSandboxProvisioningSettings {
     /// Derives the full firewall settings using the same environment handling as elevated setup.
@@ -113,13 +114,15 @@ pub fn provision_windows_sandbox_via_service(
                     .to_str()
                     .context("sandbox provisioning home is not valid UTF-8")?
                     .to_owned(),
+                registered_core: false,
+                refresh_only: false,
                 settings,
                 listeners,
             },
         },
     };
 
-    match send_service_request(request, PROVISIONING_TIMEOUT)? {
+    match send_service_request(&request, PROVISIONING_TIMEOUT)? {
         crate::SandboxProvisioningResponse::Ok => {
             Ok(WindowsSandboxProvisioningOutcome::Provisioned)
         }
@@ -141,7 +144,7 @@ pub fn register_desktop_installation(codex_home: &Path) -> anyhow::Result<()> {
                 .to_owned(),
         },
     };
-    match send_service_request(request, Duration::from_secs(5))? {
+    match send_service_request(&request, Duration::from_secs(5))? {
         crate::SandboxProvisioningResponse::Ok => Ok(()),
         crate::SandboxProvisioningResponse::Unavailable => {
             bail!("desktop uninstall registration service is unavailable")
@@ -151,31 +154,14 @@ pub fn register_desktop_installation(codex_home: &Path) -> anyhow::Result<()> {
 }
 
 fn send_service_request(
-    request: crate::FramedProvisioningMessage,
+    request: &crate::FramedProvisioningMessage,
     timeout: Duration,
 ) -> anyhow::Result<crate::SandboxProvisioningResponse> {
     let deadline = Instant::now() + timeout;
     let Some(mut pipe) = connect(deadline)? else {
         return Ok(crate::SandboxProvisioningResponse::Unavailable);
     };
-    let response = (|| -> anyhow::Result<crate::FramedProvisioningMessage> {
-        verify_server(pipe.as_raw_handle() as HANDLE)
-            .context("authenticate provisioning pipe server")?;
-        crate::write_provisioning_frame(&mut pipe, &request)
-            .context("send sandbox provisioning request")?;
-        crate::framed_io::wait_for_complete_frame(&pipe, deadline)
-            .context("wait for sandbox provisioning response")?;
-        crate::read_provisioning_frame(&mut pipe)
-            .context("read sandbox provisioning response")?
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "sandbox provisioning service closed the pipe without a response",
-                )
-            })
-            .context("read sandbox provisioning response")
-    })();
-    let response = match response {
+    let response = match exchange_request(&mut pipe, request, deadline) {
         Ok(response) => response,
         Err(error)
             if error.downcast_ref::<io::Error>().is_some_and(|error| {
@@ -195,7 +181,35 @@ fn send_service_request(
         }
         Err(error) => return Err(error),
     };
+    if matches!(&response, crate::SandboxProvisioningResponse::Error { message }
+        if message == crate::SANDBOX_GROUP_CHANGED)
+    {
+        drop(pipe);
+        return group_change::retry(request, deadline);
+    }
+    Ok(response)
+}
 
+fn exchange_request(
+    pipe: &mut File,
+    request: &crate::FramedProvisioningMessage,
+    deadline: Instant,
+) -> anyhow::Result<crate::SandboxProvisioningResponse> {
+    verify_server(pipe.as_raw_handle() as HANDLE)
+        .context("authenticate provisioning pipe server")?;
+    crate::write_provisioning_frame(&mut *pipe, request)
+        .context("send sandbox provisioning request")?;
+    crate::framed_io::wait_for_complete_frame(pipe, deadline)
+        .context("wait for sandbox provisioning response")?;
+    let response = crate::read_provisioning_frame(pipe)
+        .context("read sandbox provisioning response")?
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "sandbox provisioning service closed the pipe without a response",
+            )
+        })
+        .context("read sandbox provisioning response")?;
     if response.version != crate::PROVISIONING_PROTOCOL_VERSION {
         return Ok(crate::SandboxProvisioningResponse::Unavailable);
     }
@@ -206,15 +220,16 @@ fn send_service_request(
 }
 
 fn connect(deadline: Instant) -> anyhow::Result<Option<File>> {
+    let pipe_name = crate::windows_sandbox_service_pipe_name()?;
     let open_pipe = || {
         OpenOptions::new()
             .read(true)
             .write(true)
             .custom_flags(SECURITY_SQOS_PRESENT | SECURITY_IMPERSONATION)
-            .open(crate::SANDBOX_PROVISIONING_PIPE_NAME)
+            .open(&pipe_name)
     };
 
-    let pipe_name = crate::to_wide(crate::SANDBOX_PROVISIONING_PIPE_NAME);
+    let pipe_name = crate::to_wide(&pipe_name);
     loop {
         match open_pipe() {
             Ok(pipe) => return Ok(Some(pipe)),
@@ -260,7 +275,7 @@ fn verify_server(pipe: HANDLE) -> anyhow::Result<()> {
     }
     let manager = ServiceHandle(manager);
 
-    let service_name = crate::to_wide(SERVICE_NAME);
+    let service_name = crate::to_wide(crate::windows_sandbox_service_name()?);
     let service = unsafe {
         Services::OpenServiceW(
             manager.0,
