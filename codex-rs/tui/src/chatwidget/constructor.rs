@@ -97,6 +97,7 @@ impl ChatWidget {
             pet_http_client.clone(),
         );
         let mut widget = Self {
+            empty_state_animation: Default::default(),
             cyber_policy_notice: Default::default(),
             app_event_tx: app_event_tx.clone(),
             frame_requester: frame_requester.clone(),
@@ -137,7 +138,9 @@ impl ChatWidget {
             snapshot_local_images: false,
             pending_image_submission: None,
             local_worktree_operations: true,
-            windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
+            windows_sandbox_local_server: false,
+            windows_sandbox_config: Default::default(),
+            windows_sandbox_host: crate::app::WindowsSandboxHost::Unknown,
             #[cfg(any(target_os = "windows", test))]
             windows_sandbox_elevated_setup_complete: false,
             token_info: None,
@@ -145,9 +148,6 @@ impl ChatWidget {
             rate_limit_snapshots_by_limit_id: BTreeMap::new(),
             refreshing_status_outputs: Vec::new(),
             next_status_refresh_request_id: 0,
-            refreshing_token_activity_output: None,
-            completed_token_activity_output: None,
-            next_token_activity_request_id: 0,
             pending_rate_limit_reset_request_id: None,
             pending_rate_limit_reset_idempotency_key: None,
             rate_limit_reset_picker_request_id: None,
@@ -306,13 +306,6 @@ impl ChatWidget {
         widget
             .bottom_pane
             .set_queued_message_edit_binding(widget.queued_message_edit_hint_binding);
-        #[cfg(target_os = "windows")]
-        widget
-            .bottom_pane
-            .set_windows_degraded_sandbox_active(matches!(
-                crate::windows_sandbox::level_from_config(&widget.config),
-                WindowsSandboxLevel::RestrictedToken
-            ));
         widget.update_collaboration_mode_indicator();
 
         widget

@@ -4,18 +4,22 @@
 //! responses must never refresh these values; live preference changes belong here. The remaining
 //! Config-based lifecycle adapters also use this conversion until their interfaces are migrated.
 //! Effective animations also respect the TUI host's launch-time accessibility preference.
+//! The selected transcript ownership and alternate-screen restrictions survive local reloads.
 
 use crate::legacy_core::config::Config;
 use crate::legacy_core::config::TerminalResizeReflowConfig;
 use crate::legacy_core::config::TerminalResizeReflowMaxRows;
+use crate::transcript_mode::TranscriptMode;
 use codex_config::types::History;
 use codex_config::types::Notice;
 use codex_config::types::Tui;
+use codex_features::Feature;
 use codex_utils_absolute_path::AbsolutePathBuf;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct LocalSettings {
     pub(crate) tui: Tui,
+    pub(crate) transcript_mode: TranscriptMode,
     pub(crate) history: History,
     pub(crate) notices: Notice,
     pub(crate) codex_home: AbsolutePathBuf,
@@ -24,17 +28,41 @@ pub(crate) struct LocalSettings {
 
 impl From<&Config> for LocalSettings {
     fn from(config: &Config) -> Self {
-        Self::with_system_motion(config, crate::system_motion::mode())
+        Self::with_accessibility_preferences(
+            config,
+            crate::system_motion::mode(),
+            crate::screen_reader::animation_default(),
+        )
     }
 }
 
 impl LocalSettings {
-    fn with_system_motion(config: &Config, system_motion: crate::motion::MotionMode) -> Self {
+    fn with_accessibility_preferences(
+        config: &Config,
+        system_motion: crate::motion::MotionMode,
+        screen_reader_default: crate::motion::MotionMode,
+    ) -> Self {
+        let animations = if screen_reader_default == crate::motion::MotionMode::Reduced {
+            // Consult the current layers so preferences edited after startup still win.
+            config
+                .config_layer_stack
+                .effective_config()
+                .get("tui")
+                .and_then(|tui| tui.get("animations"))
+                .is_some()
+                && config.animations
+        } else {
+            config.animations
+        };
         Self {
+            transcript_mode: TranscriptMode::resolve(
+                config.features.enabled(Feature::TranscriptV2),
+                config.tui_alternate_screen != codex_config::types::AltScreenMode::Never,
+            ),
             tui: Tui {
                 notification_settings: config.tui_notifications.clone(),
-                animations: config.animations
-                    && system_motion == crate::motion::MotionMode::Animated,
+                animations: animations && system_motion == crate::motion::MotionMode::Animated,
+                screen_reader_detection_done: None,
                 whimsy: config.tui_whimsy,
                 show_tooltips: config.show_tooltips,
                 show_server_version_notice: config.tui_show_server_version_notice,
@@ -73,6 +101,26 @@ impl LocalSettings {
 }
 
 impl LocalSettings {
+    /// Adopt the screen selected before first paint, including command-line restrictions.
+    pub(crate) fn for_tui(config: &Config, tui: &crate::tui::Tui) -> Self {
+        let mut settings = Self::from(config);
+        settings.transcript_mode = tui.transcript_mode();
+        if !tui.is_alt_screen_enabled() {
+            settings.tui.alternate_screen = codex_config::types::AltScreenMode::Never;
+        } else if settings.tui.alternate_screen == codex_config::types::AltScreenMode::Never {
+            settings.tui.alternate_screen = codex_config::types::AltScreenMode::Auto;
+        }
+        settings
+    }
+
+    /// Refresh editable preferences without changing this launch's terminal ownership.
+    pub(crate) fn reloaded(&self, config: &Config) -> Self {
+        let mut settings = Self::from(config);
+        settings.transcript_mode = self.transcript_mode;
+        settings.tui.alternate_screen = self.tui.alternate_screen;
+        settings
+    }
+
     pub(crate) fn terminal_resize_reflow(&self) -> TerminalResizeReflowConfig {
         TerminalResizeReflowConfig {
             max_rows: match self.tui.terminal_resize_reflow_max_rows {

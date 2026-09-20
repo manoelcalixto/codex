@@ -10,6 +10,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use windows_sys::Win32::Foundation as foundation;
 use windows_sys::Win32::System::Registry as registry;
+use windows_sys::Win32::UI::Shell::SHDeleteEmptyKeyW;
 
 /// Selects legacy helper materialization or verified app-contained Core for setup.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -80,14 +81,19 @@ pub struct RuntimeRegistration {
 
 impl RuntimeRegistration {
     pub fn ready_for_package(&self, full_name: &str) -> bool {
+        self.can_resume_registration() && self.ready_package.as_deref() == Some(full_name)
+    }
+
+    /// Complete account ownership allows registration to resume, not runtime execution.
+    /// Callers must still authenticate the owner and verify the live account SIDs/settings.
+    pub fn can_resume_registration(&self) -> bool {
         self.retiring.is_none()
-            && self.ready_package.as_deref() == Some(full_name)
             && self.accounts.len() == 2
             && self.accounts[0].account != self.accounts[1].account
             && self
                 .accounts
                 .iter()
-                .all(|account| account.alias_path.is_some())
+                .all(|account| account.alias_path.is_some() && !account.cleanup_logon_pending)
     }
 }
 
@@ -113,7 +119,12 @@ impl InstallationRecord {
             "registered sandbox resources belong to a different owner or package"
         );
         ensure!(
-            self.runtime()?.retiring.is_none(),
+            self.runtime()?.retiring.is_none()
+                && self
+                    .runtime()?
+                    .accounts
+                    .iter()
+                    .all(|account| !account.cleanup_logon_pending),
             "registered sandbox cleanup must finish before provisioning"
         );
         Ok(())
@@ -122,6 +133,9 @@ impl InstallationRecord {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RuntimeAccountRegistration {
+    /// Persisted before temporarily enabling an account; cleared only after re-disabling it.
+    #[serde(default)]
+    pub cleanup_logon_pending: bool,
     pub account: SandboxRuntimeAccount,
     pub user_sid: String,
     /// OS-resolved alias written by the service, never inferred from a user name.
@@ -129,6 +143,28 @@ pub struct RuntimeAccountRegistration {
     pub alias_path: Option<std::path::PathBuf>,
 }
 
+/// Capture the requesting process identity before elevation, never USERNAME.
+pub(crate) fn current_setup_user() -> Result<String> {
+    use std::os::windows::io::FromRawHandle;
+    use std::os::windows::io::OwnedHandle;
+    use windows_sys::Win32::Security as security;
+    use windows_sys::Win32::System::Threading as threading;
+    let mut token = 0;
+    if unsafe {
+        threading::OpenProcessToken(
+            threading::GetCurrentProcess(),
+            security::TOKEN_QUERY,
+            &mut token,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error()).context("query requesting setup identity");
+    }
+    let _token = unsafe { OwnedHandle::from_raw_handle(token as _) };
+    let sid = unsafe { crate::token::get_user_sid_bytes(token)? };
+    unsafe { crate::winutil::account_name_from_sid(sid.as_ptr() as _) }
+        .context("resolve requesting setup identity")
+}
 /// Core owns its complete record; the old parent is only a fallback before/after Core.
 pub fn load_installation() -> Result<Option<InstallationRecord>> {
     if let Some(record) = crate::installation_record::load_from(CORE_INSTALLATION_KEY)? {
@@ -161,7 +197,17 @@ pub fn remove_installation() -> Result<()> {
     match status {
         foundation::ERROR_SUCCESS
         | foundation::ERROR_FILE_NOT_FOUND
-        | foundation::ERROR_PATH_NOT_FOUND => flush_installation(INSTALLATION_KEY),
+        | foundation::ERROR_PATH_NOT_FOUND => {
+            flush_installation(INSTALLATION_KEY)?;
+            // Best-effort pruning preserves any remaining values or subkeys.
+            let _ = unsafe {
+                SHDeleteEmptyKeyW(
+                    registry::HKEY_LOCAL_MACHINE,
+                    to_wide(INSTALLATION_KEY).as_ptr(),
+                )
+            };
+            Ok(())
+        }
         status => Err(io::Error::from_raw_os_error(status as i32))
             .context("remove protected legacy sandbox installation record"),
     }

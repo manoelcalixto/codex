@@ -127,6 +127,7 @@ pub(crate) async fn run_codex_thread_interactive(
         client_mcp_extensions: parent_session.services.client_mcp_extensions.clone(),
         reserved_thread_id: None,
         analytics_events_client: Some(parent_session.services.analytics_events_client.clone()),
+        image_store: Arc::clone(&parent_session.services.image_store),
         thread_store: Arc::clone(&parent_session.services.thread_store),
         attestation_provider: parent_session.services.attestation_provider.clone(),
         external_time_provider: Some(Arc::clone(&parent_session.services.time_provider)),
@@ -198,7 +199,7 @@ pub(crate) async fn run_codex_thread_one_shot(
     // requiring the caller to cancel the parent token.
     let child_cancel = cancel_token.child_token();
     let parent_turn_id = parent_ctx.sub_id.clone();
-    let parent_environments = parent_ctx.environments.clone();
+    let parent_environments = parent_ctx.initial_environments.clone();
     let root_turn_id = parent_ctx.turn_metadata_state.root_turn_id();
     let (session, io) = Box::pin(run_codex_thread_interactive(
         config,

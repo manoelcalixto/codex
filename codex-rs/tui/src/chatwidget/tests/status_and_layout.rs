@@ -1,3 +1,4 @@
+use super::helpers::drain_insert_history_transcript;
 use super::*;
 use crate::bottom_pane::goal_status_indicator_line;
 use crate::chatwidget::ThreadUsageOutcome;
@@ -146,7 +147,7 @@ async fn app_server_model_verification_renders_warning() {
         vec![AppServerModelVerification::TrustedAccessForCyber],
     );
 
-    let cells = drain_insert_history(&mut rx);
+    let cells = drain_insert_history_transcript(&mut rx);
     assert_eq!(cells.len(), 1);
     let rendered = lines_to_single_string(&cells[0]);
     assert!(rendered.contains("multiple flags for possible cybersecurity risk"));
@@ -609,13 +610,13 @@ async fn rate_limit_usage_warnings_early_threshold_is_scoped_and_deduplicated() 
         usage.plan_type = plan_type;
         usage.primary.as_mut().unwrap().window_duration_mins = window_minutes;
         chat.on_rate_limit_snapshot(Some(usage.clone()));
-        assert!(drain_insert_history(&mut rx).is_empty());
+        assert!(drain_insert_history_transcript(&mut rx).is_empty());
 
         // Rolling updates retain the plan learned from the account usage response.
         usage.plan_type = None;
         usage.primary.as_mut().unwrap().used_percent = 50;
         chat.on_rolling_rate_limit_snapshot(usage.clone());
-        let warnings = drain_insert_history(&mut rx);
+        let warnings = drain_insert_history_transcript(&mut rx);
         assert_eq!(!warnings.is_empty(), should_warn_early);
         if should_warn_early {
             insta::allow_duplicates! {
@@ -627,13 +628,13 @@ async fn rate_limit_usage_warnings_early_threshold_is_scoped_and_deduplicated() 
         }
 
         chat.on_rolling_rate_limit_snapshot(usage.clone());
-        assert!(drain_insert_history(&mut rx).is_empty());
+        assert!(drain_insert_history_transcript(&mut rx).is_empty());
         for used_percent in [75, 90, 95] {
             usage.primary.as_mut().unwrap().used_percent = used_percent;
             chat.on_rolling_rate_limit_snapshot(usage.clone());
-            assert_eq!(drain_insert_history(&mut rx).len(), 1);
+            assert_eq!(drain_insert_history_transcript(&mut rx).len(), 1);
             chat.on_rolling_rate_limit_snapshot(usage.clone());
-            assert!(drain_insert_history(&mut rx).is_empty());
+            assert!(drain_insert_history_transcript(&mut rx).is_empty());
         }
     }
 }
@@ -2839,7 +2840,7 @@ async fn warning_event_adds_warning_history_cell() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     handle_warning(&mut chat, "test warning message");
 
-    let cells = drain_insert_history(&mut rx);
+    let cells = drain_insert_history_transcript(&mut rx);
     assert_eq!(cells.len(), 1, "expected one warning history cell");
     let rendered = lines_to_single_string(&cells[0]);
     assert!(
@@ -2856,7 +2857,7 @@ async fn unsupported_code_mode_warning_renders_as_warning_history_cell() {
         "Code Mode is enabled in configuration, but model `gpt-5.4` does not advertise Code Mode support. This may degrade model performance. Disable `features.code_mode` and `features.code_mode_only`, or select a model whose metadata enables Code Mode.",
     );
 
-    let cells = drain_insert_history(&mut rx);
+    let cells = drain_insert_history_transcript(&mut rx);
     assert_eq!(cells.len(), 1, "expected one warning history cell");
     insta::assert_snapshot!(
         "unsupported_code_mode_warning",
@@ -2872,7 +2873,7 @@ async fn repeated_model_metadata_warning_is_hidden_for_same_slug() {
     handle_warning(&mut chat, warning);
     handle_warning(&mut chat, warning);
 
-    let cells = drain_insert_history(&mut rx);
+    let cells = drain_insert_history_transcript(&mut rx);
     assert_eq!(cells.len(), 1, "expected one warning history cell");
     let rendered = lines_to_single_string(&cells[0]);
     assert!(
@@ -2904,7 +2905,7 @@ async fn status_line_invalid_items_warn_once() {
     chat.thread_id = Some(ThreadId::new());
 
     chat.refresh_status_line();
-    let cells = drain_insert_history(&mut rx);
+    let cells = drain_insert_history_transcript(&mut rx);
     assert_eq!(cells.len(), 1, "expected one warning history cell");
     let rendered = lines_to_single_string(&cells[0]);
     assert!(
@@ -2913,7 +2914,7 @@ async fn status_line_invalid_items_warn_once() {
     );
 
     chat.refresh_status_line();
-    let cells = drain_insert_history(&mut rx);
+    let cells = drain_insert_history_transcript(&mut rx);
     assert!(
         cells.is_empty(),
         "expected invalid status line warning to emit only once"
@@ -4022,7 +4023,10 @@ async fn terminal_title_model_updates_on_model_change_without_manual_refresh() {
     chat.local_settings.tui.terminal_title = Some(vec!["model".to_string()]);
     chat.refresh_terminal_title();
 
-    assert_eq!(chat.last_terminal_title, Some("gpt-5.4".to_string()));
+    assert_chatwidget_snapshot!(
+        "terminal_title_model_display_name",
+        chat.last_terminal_title.as_deref().expect("terminal title")
+    );
 
     chat.set_model("gpt-5.2");
 
@@ -4321,6 +4325,7 @@ async fn session_configured_clears_goal_status_footer() {
 
     let rollout_file = NamedTempFile::new().unwrap();
     chat.handle_thread_session(crate::session_state::ThreadSessionState {
+        windows_sandbox_host: crate::app::WindowsSandboxHost::Local,
         thread_id: ThreadId::new(),
         forked_from_id: None,
         fork_parent_title: None,
@@ -5805,16 +5810,14 @@ printf 'fenced within fenced\n'
 
     // Finalize the stream without sending a final AgentMessage, to flush any tail.
     handle_turn_completed(&mut chat, "turn-1", /*duration_ms*/ None);
-    for lines in drain_insert_history(&mut rx) {
+    for lines in drain_insert_history_normalized(&mut rx) {
         crate::insert_history::insert_history_lines(&mut term, lines)
             .expect("Failed to insert history lines in test");
     }
 
     assert_chatwidget_snapshot!(
         "chatwidget_markdown_code_blocks_vt100_snapshot",
-        normalize_completion_timestamps(normalize_snapshot_paths(
-            term.backend().vt100().screen().contents()
-        ))
+        normalize_snapshot_paths(term.backend().vt100().screen().contents())
     );
 }
 

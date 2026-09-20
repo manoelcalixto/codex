@@ -62,7 +62,13 @@ async fn older_server_notice_is_visible_in_agents_overview() {
     let view = app.agents_overview_view(Vec::new(), /*selected_thread_id*/ None);
     app.chat_widget.show_bottom_pane_view(Box::new(view));
     let rendered = render_bottom_popup(&app.chat_widget, /*width*/ 80);
-    insta::assert_snapshot!(rendered.lines().take(2).collect::<Vec<_>>().join("\n"));
+    insta::assert_snapshot!(
+        rendered
+            .lines()
+            .take(/*n*/ 2)
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
 }
 
 #[tokio::test]
@@ -73,14 +79,14 @@ async fn server_version_overview_notice_updates_and_clears() {
     let view = app.agents_overview_view(Vec::new(), /*selected_thread_id*/ None);
     app.chat_widget.show_bottom_pane_view(Box::new(view));
     let rendered = render_bottom_popup(&app.chat_widget, /*width*/ 80);
-    insta::assert_snapshot!(rendered.lines().take(2).collect::<Vec<_>>().join("\n"), @"  Service v0.151.0 < Codex CLI v0.153.0
+    insta::assert_snapshot!(rendered.lines().take(/*n*/ 2).collect::<Vec<_>>().join("\n"), @"  Service v0.151.0 < Codex CLI v0.153.0
   0 need input   0 working   0 ready");
 
-    app.update_server_version_overview_notice("0.153.0", /*older_server*/ None);
+    app.update_server_version_overview_notice("0.153.0", /*server_version*/ None);
     let view = app.agents_overview_view(Vec::new(), /*selected_thread_id*/ None);
     app.chat_widget.show_bottom_pane_view(Box::new(view));
     let rendered = render_bottom_popup(&app.chat_widget, /*width*/ 80);
-    insta::assert_snapshot!(rendered.lines().take(2).collect::<Vec<_>>().join("\n"), @"  Agent command center
+    insta::assert_snapshot!(rendered.lines().take(/*n*/ 2).collect::<Vec<_>>().join("\n"), @"  Agent command center
   0 need input   0 working   0 ready");
 }
 
@@ -430,7 +436,7 @@ async fn shared_overview_seeds_once_and_retains_locally_resumed_history() -> Res
     let mut app = make_test_app().await;
     trust_fixture_folders(&mut app);
     let mut ids = Vec::new();
-    for day in 1..=22 {
+    for day in 1..=12 {
         let source = match day {
             3 => codex_protocol::protocol::SessionSource::Custom("atlas".to_string()),
             4 => codex_protocol::protocol::SessionSource::Custom("chatgpt".to_string()),
@@ -457,13 +463,13 @@ async fn shared_overview_seeds_once_and_retains_locally_resumed_history() -> Res
     }
     let message_path = app_test_support::rollout_path(
         &app.config.codex_home,
-        "2025-01-21T12-00-00",
-        &ids[20].to_string(),
+        "2025-01-11T12-00-00",
+        &ids[10].to_string(),
     );
     let mut history = std::fs::read_to_string(&message_path)?;
     history.push_str(
         &serde_json::json!({
-            "timestamp": "2025-01-21T12:00:01Z",
+            "timestamp": "2025-01-11T12:00:01Z",
             "type": "event_msg",
             "payload": { "type": "agent_message", "message": "Found the regression in the parser." }
         })
@@ -473,7 +479,7 @@ async fn shared_overview_seeds_once_and_retains_locally_resumed_history() -> Res
     std::fs::write(message_path, history)?;
     let config = app.config.clone();
     let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(&config)).await?;
-    for thread_id in [ids[0], ids[21]] {
+    for thread_id in [ids[0], ids[11]] {
         app_server
             .resume_thread(
                 &app.local_settings,
@@ -486,8 +492,8 @@ async fn shared_overview_seeds_once_and_retains_locally_resumed_history() -> Res
     // A newer rollout missing from the index must not trigger a startup filesystem scan.
     app_test_support::create_fake_rollout_with_source(
         &app.config.codex_home,
-        "2025-01-23T12-00-00",
-        "2025-01-23T12:00:00Z",
+        "2025-01-13T12-00-00",
+        "2025-01-13T12:00:00Z",
         "Unindexed task",
         Some(&app.config.model_provider_id),
         /*git_info*/ None,
@@ -495,6 +501,7 @@ async fn shared_overview_seeds_once_and_retains_locally_resumed_history() -> Res
     )
     .expect("materialize unindexed session");
     app.app_server_target = AppServerTarget::LocalDaemon {
+        allow_embedded_fallback: true,
         endpoint: crate::RemoteAppServerEndpoint::UnixSocket {
             socket_path: test_path_buf("/tmp/unused.sock").abs(),
         },
@@ -510,9 +517,9 @@ async fn shared_overview_seeds_once_and_retains_locally_resumed_history() -> Res
     assert_eq!(retained, expected);
     assert_eq!(
         app.agents_overview.last_messages,
-        HashMap::from([(ids[20], "Found the regression in the parser.".to_string())])
+        HashMap::from([(ids[10], "Found the regression in the parser.".to_string())])
     );
-    let thread = app.agents_overview.threads[&ids[20]].as_ref().unwrap();
+    let thread = app.agents_overview.threads[&ids[10]].as_ref().unwrap();
     assert_eq!(thread.status, ThreadStatus::NotLoaded);
 
     let created = app_server.start_thread(&config).await?.session.thread_id;
@@ -595,6 +602,12 @@ async fn shared_overview_seeds_once_and_retains_locally_resumed_history() -> Res
     finish_overview_refresh(&mut restarted, &app_server, &mut event_rx).await;
     let retained: HashSet<_> = restarted.agents_overview.threads.keys().copied().collect();
     assert_eq!(retained, recent_ids);
+    restarted.open_agents_overview(&app_server);
+    insta::assert_snapshot!(
+        "agents_overview_recent_sessions",
+        render_bottom_popup(&restarted.chat_widget, /*width*/ 80)
+            .replace(&test_path_display("/"), "/")
+    );
     app_server.shutdown().await?;
     Ok(())
 }
@@ -621,6 +634,15 @@ async fn finish_overview_refresh(
 
 #[tokio::test]
 async fn hidden_system_thread_does_not_refresh_shared_overview() {
+    check_hidden_thread_does_not_refresh_shared_overview("system").await;
+}
+
+#[tokio::test]
+async fn hidden_title_thread_does_not_refresh_shared_overview() {
+    check_hidden_thread_does_not_refresh_shared_overview("thread_title").await;
+}
+
+async fn check_hidden_thread_does_not_refresh_shared_overview(source: &str) {
     let mut app = make_test_app().await;
     let app_server = crate::start_embedded_app_server_for_picker(app.chat_widget.config_ref())
         .await
@@ -647,7 +669,7 @@ async fn hidden_system_thread_does_not_refresh_shared_overview() {
         ThreadStatus::Idle,
     );
     thread.ephemeral = true;
-    thread.thread_source = Some(ThreadSource::Feature("system".to_string()));
+    thread.thread_source = Some(ThreadSource::Feature(source.to_string()));
 
     app.handle_app_server_event(
         &app_server,
@@ -678,7 +700,7 @@ async fn hidden_system_thread_does_not_refresh_shared_overview() {
         "Persisted system thread",
         ThreadStatus::Idle,
     );
-    thread.thread_source = Some(ThreadSource::Feature("system".to_string()));
+    thread.thread_source = Some(ThreadSource::Feature(source.to_string()));
 
     app.handle_app_server_event(
         &app_server,
@@ -1466,15 +1488,18 @@ async fn failed_root_switch_keeps_background_requests_on_the_active_session() ->
 
 #[tokio::test]
 async fn root_switch_preserves_vim_line_yank() -> Result<()> {
-    let mut app = make_test_app().await;
+    // Keep the large setup and root-switch futures off the test thread's stack.
+    let mut app = Box::pin(make_test_app()).await;
     trust_fixture_folders(&mut app);
     std::fs::write(
         app.local_settings.user_config_path.as_path(),
         "[tui]\nresume_cwd = \"session\"\n",
     )?;
-    let mut app_server =
-        crate::start_embedded_app_server_for_picker(app.chat_widget.config_ref()).await?;
-    let previous = app_server.start_thread(&app.config).await?;
+    let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(
+        app.chat_widget.config_ref(),
+    ))
+    .await?;
+    let previous = Box::pin(app_server.start_thread(&app.config)).await?;
     app.enqueue_primary_thread_session(previous.session, previous.turns)
         .await?;
     let target_thread_id = ThreadId::from_string(
@@ -1497,7 +1522,7 @@ async fn root_switch_preserves_vim_line_yank() -> Result<()> {
     assert_eq!(app.chat_widget.composer_text_with_pending(), "");
     let mut tui = crate::tui::test_support::make_test_tui()?;
 
-    app.select_agents_overview_thread(&mut tui, &mut app_server, target_thread_id)
+    Box::pin(app.select_agents_overview_thread(&mut tui, &mut app_server, target_thread_id))
         .await?;
 
     assert_eq!(app.current_displayed_thread_id(), Some(target_thread_id));
@@ -1564,8 +1589,10 @@ async fn root_switch_loads_local_preferences_from_disk() -> Result<()> {
 async fn root_switch_preserves_idle_root_with_running_subagent() -> Result<()> {
     let mut app = make_test_app().await;
     trust_fixture_folders(&mut app);
-    let mut app_server =
-        crate::start_embedded_app_server_for_picker(app.chat_widget.config_ref()).await?;
+    let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(
+        app.chat_widget.config_ref(),
+    ))
+    .await?;
     let previous = app_server.start_thread(&app.config).await?;
     let previous_root_id = previous.session.thread_id;
     app.enqueue_primary_thread_session(previous.session, previous.turns)
@@ -1662,7 +1689,8 @@ async fn overview_selection_applies_user_permissions_only_to_unloaded_threads() 
             .expect("create historical session"),
         )?);
     }
-    let mut app_server = crate::start_embedded_app_server_for_picker(&server_config).await?;
+    let mut app_server =
+        Box::pin(crate::start_embedded_app_server_for_picker(&server_config)).await?;
     let loaded = app_server
         .resume_thread(
             &crate::local_settings::LocalSettings::from(&server_config),
@@ -1781,7 +1809,8 @@ async fn overview_cold_resume_honors_working_directory_selection() -> Result<()>
         ("session", true, true),
         ("session", false, false),
     ] {
-        let mut app = make_test_app().await;
+        // Keep the large setup and cold-resume futures off the Windows test stack.
+        let mut app = Box::pin(make_test_app()).await;
         trust_fixture_folders(&mut app);
         let chosen = app.config.codex_home.join("chosen");
         let overridden = app.config.codex_home.join("overridden");
@@ -1808,7 +1837,8 @@ async fn overview_cold_resume_honors_working_directory_selection() -> Result<()>
             )
             .expect("create historical session"),
         )?;
-        let mut app_server = crate::start_embedded_app_server_for_picker(&app.config).await?;
+        let mut app_server =
+            Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
         app.launch_cwd = chosen.to_path_buf();
         app.harness_overrides.cwd = cli_cwd.then(|| {
             if runtime_cwd {
@@ -1824,17 +1854,46 @@ async fn overview_cold_resume_honors_working_directory_selection() -> Result<()>
             test_path_buf("/").abs()
         };
         let mut tui = crate::tui::test_support::make_test_tui()?;
-        app.select_agents_overview_thread(&mut tui, &mut app_server, thread_id)
-            .await?;
-        let observed = app_server
-            .resume_thread(
-                &app.local_settings,
-                app.config.clone(),
-                thread_id,
-                crate::app_server_session::ResumeModelSettings::PreserveExistingThread,
-            )
-            .await?
-            .session;
+        // On this current-thread runtime, the server cannot answer until we yield. Cancel the
+        // pending selection to release its terminal borrow and inspect what the user sees now.
+        let mut selection =
+            Box::pin(app.select_agents_overview_thread(&mut tui, &mut app_server, thread_id));
+        assert!(futures::poll!(&mut selection).is_pending());
+        drop(selection);
+        let pending_loading =
+            crate::custom_terminal::test_support::last_rendered_buffer(&tui.terminal).clone();
+        Box::pin(app.select_agents_overview_thread(&mut tui, &mut app_server, thread_id)).await?;
+        // The widget replacement clears the terminal; feedback must remain until the next draw.
+        let loading =
+            crate::custom_terminal::test_support::last_rendered_buffer(&tui.terminal).clone();
+        assert_eq!(pending_loading, loading);
+        let loading_text = loading
+            .content
+            .chunks(usize::from(loading.area.width))
+            .map(|row| {
+                row.iter()
+                    .map(ratatui::buffer::Cell::symbol)
+                    .collect::<String>()
+            })
+            .map(|line| line.trim_end().to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        insta::allow_duplicates! {
+            insta::assert_snapshot!(loading_text.trim_end(), @"Loading task…");
+        }
+        Box::pin(app.handle_tui_event(&mut tui, &mut app_server, TuiEvent::Draw)).await?;
+        assert_ne!(
+            crate::custom_terminal::test_support::last_rendered_buffer(&tui.terminal),
+            &loading,
+        );
+        let observed = Box::pin(app_server.resume_thread(
+            &app.local_settings,
+            app.config.clone(),
+            thread_id,
+            crate::app_server_session::ResumeModelSettings::PreserveExistingThread,
+        ))
+        .await?
+        .session;
         assert_eq!(
             (app.config.cwd.clone(), observed.cwd),
             (expected_cwd.clone(), expected_cwd),
@@ -2298,6 +2357,7 @@ async fn command_center_attach_conflict_opens_read_only_and_retries() -> Result<
         .await?;
     let mut server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
     app.app_server_target = AppServerTarget::LocalDaemon {
+        allow_embedded_fallback: true,
         endpoint: crate::resolve_remote_addr("ws://127.0.0.1:4500")?,
     };
     app.chat_widget.remote_connection =

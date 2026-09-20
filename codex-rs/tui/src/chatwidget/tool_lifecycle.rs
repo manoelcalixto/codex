@@ -4,6 +4,7 @@
 //! events as transcript cells.
 
 use super::*;
+use crate::thread_transcript::tools::McpHistory;
 use codex_utils_path_uri::LegacyAppPathString;
 
 impl ChatWidget {
@@ -13,10 +14,7 @@ impl ChatWidget {
 
     pub(super) fn on_view_image_tool_call(&mut self, path: LegacyAppPathString) {
         self.flush_answer_stream_with_separator();
-        self.add_to_history(history_cell::new_view_image_tool_call(
-            path,
-            &self.config.cwd,
-        ));
+        self.add_to_history(history_cell::new_view_image_tool_call(path));
         self.request_redraw();
     }
 
@@ -202,38 +200,14 @@ impl ChatWidget {
     pub(crate) fn handle_mcp_tool_call_completed_now(&mut self, item: ThreadItem) {
         self.flush_answer_stream_with_separator();
 
-        let ThreadItem::McpToolCall {
+        let Some(McpHistory {
             id,
-            server,
-            tool,
-            status,
-            arguments,
+            invocation,
+            duration,
             result,
-            error,
-            duration_ms,
-            ..
-        } = item
+        }) = McpHistory::from_item(item)
         else {
             return;
-        };
-        let invocation = McpInvocation {
-            server,
-            tool,
-            arguments: Some(arguments),
-        };
-        let duration = Duration::from_millis(duration_ms.unwrap_or_default().max(0) as u64);
-        let result = match (result, error) {
-            (_, Some(error)) => Err(error.message),
-            (Some(result), None) => {
-                let result = *result;
-                Ok(codex_protocol::mcp::CallToolResult {
-                    content: result.content,
-                    structured_content: result.structured_content,
-                    is_error: Some(status == codex_app_server_protocol::McpToolCallStatus::Failed),
-                    meta: None,
-                })
-            }
-            (None, None) => Err("MCP tool call completed without a result".to_string()),
         };
 
         if invocation.is_computer_activity() {
@@ -248,7 +222,7 @@ impl ChatWidget {
             return;
         }
 
-        let extra_cell = match self
+        match self
             .transcript
             .active_cell
             .as_mut()
@@ -262,16 +236,29 @@ impl ChatWidget {
                     invocation,
                     self.local_settings.tui.animations,
                 );
-                let extra_cell = cell.complete(duration, result);
+                cell.complete(duration, result);
                 self.transcript.active_cell = Some(Box::new(cell));
-                extra_cell
             }
         };
 
         self.flush_active_cell();
-        if let Some(extra) = extra_cell {
-            self.add_boxed_history(extra);
-        }
+    }
+
+    /// Preserve pending calls and timers, returning the revisions before and after hydration.
+    pub(crate) fn prepend_active_computer_history(
+        &mut self,
+        older: &dyn HistoryCell,
+        turns: &[Turn],
+    ) -> Option<(u64, u64)> {
+        let previous_revision = self.transcript.active_cell_revision;
+        let active = self.transcript.active_cell.as_mut().and_then(|cell| {
+            cell.as_any_mut()
+                .downcast_mut::<history_cell::ComputerActivityCell>()
+        })?;
+        let older = crate::thread_transcript::older_computer_group(older, active, turns)?;
+        active.prepend(older);
+        self.bump_active_cell_revision();
+        Some((previous_revision, self.transcript.active_cell_revision))
     }
 
     /// Reuse only adjacent computer calls; all other active cells form a transcript boundary.
@@ -300,6 +287,7 @@ impl ChatWidget {
             item @ ThreadItem::McpToolCall { .. } => {
                 self.handle_mcp_tool_call_started_now(item);
             }
+            item @ ThreadItem::DynamicToolCall { .. } => self.handle_dynamic_tool_item_now(item),
             _ => {}
         }
     }
@@ -311,6 +299,7 @@ impl ChatWidget {
             }
             item @ ThreadItem::FileChange { .. } => self.handle_file_change_completed_now(item),
             item @ ThreadItem::McpToolCall { .. } => self.handle_mcp_tool_call_completed_now(item),
+            item @ ThreadItem::DynamicToolCall { .. } => self.handle_dynamic_tool_item_now(item),
             _ => {}
         }
     }

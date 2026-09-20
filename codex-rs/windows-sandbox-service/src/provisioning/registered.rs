@@ -11,6 +11,7 @@ use crate::ipc::ProvisioningRequest;
 use codex_windows_sandbox::string_from_sid_bytes;
 use windows::ApplicationModel::Package;
 use windows_sys::Win32::NetworkManagement::NetManagement::UF_ACCOUNTDISABLE;
+use windows_sys::Win32::NetworkManagement::NetManagement::UF_PASSWORD_EXPIRED;
 
 use crate::installation_record::InstallationRecord;
 use crate::installation_record::RuntimeRegistration;
@@ -43,27 +44,25 @@ pub(super) fn run(
         let previous = crate::installation_record::load_runtime()?
             .context("registration refresh requires completed setup")?;
         let runtime = previous.runtime()?;
-        let ready = runtime
-            .ready_package
-            .as_deref()
-            .context("registration refresh requires a ready runtime")?;
+        // Windows may restart this service during registration, after readiness was
+        // revoked. Resume only the same provisioned accounts; never repair setup.
         ensure!(
             previous.user_sid == identity.user_sid
                 && previous.codex_home == identity.codex_home
                 && crate::installation_record::is_current_package_family(&previous)?
-                && runtime.ready_for_package(ready)
+                && runtime.can_resume_registration()
                 && setup_complete,
-            "registration refresh requires unchanged, ready sandbox ownership and settings"
+            "registration refresh requires unchanged sandbox ownership and settings"
         );
         for entry in &runtime.accounts {
             let account = entry.account.username();
             ensure!(
                 codex_windows_sandbox::local_user_flags(account)?
-                    .is_some_and(|flags| flags & UF_ACCOUNTDISABLE == 0)
+                    .is_some_and(|flags| flags & (UF_ACCOUNTDISABLE | UF_PASSWORD_EXPIRED) == 0)
                     && string_from_sid_bytes(&codex_windows_sandbox::resolve_sid(account)?)
                         .map_err(anyhow::Error::msg)?
                         == entry.user_sid,
-                "registration refresh cannot replace a sandbox account"
+                "registration refresh cannot repair or replace a sandbox account"
             );
         }
     }
@@ -79,12 +78,13 @@ pub(super) fn run(
         });
         // Persist the authenticated owner before setup can rotate shared credentials.
         crate::installation_record::save_runtime(&installation)?;
+        // Expired passwords require full setup to rotate and persist credentials before logon.
         for account in [
             codex_windows_sandbox::OFFLINE_USERNAME,
             codex_windows_sandbox::ONLINE_USERNAME,
         ] {
             setup_complete &= codex_windows_sandbox::local_user_flags(account)?
-                .is_some_and(|flags| flags & UF_ACCOUNTDISABLE == 0);
+                .is_some_and(|flags| flags & (UF_ACCOUNTDISABLE | UF_PASSWORD_EXPIRED) == 0);
         }
         if !setup_complete {
             // Account state can change outside our setup lock; refresh must never repair it.
@@ -117,7 +117,7 @@ pub(super) fn run(
         .inspect_err(|error| {
             crate::service::log_error(
                 crate::service::EVENT_PROVISIONING_FAILED,
-                &format!("Codex sandbox provisioning failed: {error}"),
+                &format!("Codex sandbox provisioning failed: {error:#}"),
             );
         })
         .context("registered sandbox provisioning failed")?;
