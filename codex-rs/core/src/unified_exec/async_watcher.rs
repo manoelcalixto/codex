@@ -50,18 +50,11 @@ struct Emitter {
 
 struct Buffer<const MAX_BYTES: usize = UNIFIED_EXEC_OUTPUT_DELTA_MAX_BYTES> {
     pending: Vec<u8>,
-    transcript: Arc<Mutex<HeadTailBuffer>>,
     emitter: Emitter,
 }
 
-/// Spawn a background task that continuously reads from the PTY, appends to the
-/// shared transcript, and emits ExecCommandOutputDelta events on UTF‑8
-/// boundaries.
-pub(crate) fn start_streaming_output(
-    process: &UnifiedExecProcess,
-    context: &UnifiedExecContext,
-    transcript: Arc<Mutex<HeadTailBuffer>>,
-) {
+/// Spawn a background task that emits ExecCommandOutputDelta events on UTF‑8 boundaries.
+pub(crate) fn start_streaming_output(process: &UnifiedExecProcess, context: &UnifiedExecContext) {
     let mut receiver = process.output_receiver();
     let output_drained = process.output_drained_notify();
     let exit_token = process.cancellation_token();
@@ -83,7 +76,6 @@ pub(crate) fn start_streaming_output(
 
         let mut output: Buffer = Buffer {
             pending: Vec::new(),
-            transcript,
             emitter,
         };
 
@@ -202,6 +194,7 @@ pub(crate) fn spawn_exit_watcher(
         if let Some(message) = process.failure_message() {
             drop(plugin_metrics_sidecar);
             emit_failed_exec_end_for_unified_exec(
+                process.sandbox_type(),
                 session_ref,
                 turn_ref,
                 model_info,
@@ -229,6 +222,7 @@ pub(crate) fn spawn_exit_watcher(
             )
             .await;
             emit_exec_end_for_unified_exec(
+                process.sandbox_type(),
                 session_ref,
                 turn_ref,
                 model_info,
@@ -256,13 +250,7 @@ impl<const MAX_BYTES: usize> Buffer<MAX_BYTES> {
                 "a frame must fit one UTF-8 scalar"
             )
         };
-        let Self {
-            pending,
-            transcript,
-            emitter,
-        } = self;
-
-        transcript.lock().await.push_chunk(&bytes);
+        let Self { pending, emitter } = self;
 
         // Reuse a producer chunk when it fits, retaining only an incomplete
         // UTF-8 suffix for the next push.
@@ -297,7 +285,6 @@ impl<const MAX_BYTES: usize> Buffer<MAX_BYTES> {
     async fn finish(self) {
         let Self {
             pending,
-            transcript: _,
             mut emitter,
         } = self;
         debug_assert!(
@@ -342,6 +329,7 @@ impl Emitter {
 /// text when the transcript is empty.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn emit_exec_end_for_unified_exec(
+    sandbox_type: Option<codex_protocol::sandbox::SandboxType>,
     session_ref: Arc<Session>,
     turn_ref: Arc<TurnContext>,
     model_info: Arc<ModelInfo>,
@@ -365,13 +353,14 @@ pub(crate) async fn emit_exec_end_for_unified_exec(
         duration,
         timed_out,
     };
-    let event_ctx = ToolEventCtx::new(
+    let mut event_ctx = ToolEventCtx::new(
         session_ref.as_ref(),
         turn_ref.as_ref(),
         &model_info,
         &call_id,
         /*turn_diff_tracker*/ None,
     );
+    event_ctx.sandbox_type = sandbox_type;
     let emitter = ToolEmitter::unified_exec(
         &command,
         cwd,
@@ -392,6 +381,7 @@ pub(crate) async fn emit_exec_end_for_unified_exec(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn emit_failed_exec_end_for_unified_exec(
+    sandbox_type: Option<codex_protocol::sandbox::SandboxType>,
     session_ref: Arc<Session>,
     turn_ref: Arc<TurnContext>,
     model_info: Arc<ModelInfo>,
@@ -423,13 +413,14 @@ pub(crate) async fn emit_failed_exec_end_for_unified_exec(
         duration,
         timed_out: false,
     };
-    let event_ctx = ToolEventCtx::new(
+    let mut event_ctx = ToolEventCtx::new(
         session_ref.as_ref(),
         turn_ref.as_ref(),
         &model_info,
         &call_id,
         /*turn_diff_tracker*/ None,
     );
+    event_ctx.sandbox_type = sandbox_type;
     let emitter = ToolEmitter::unified_exec(
         &command,
         cwd,

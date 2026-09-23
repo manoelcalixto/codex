@@ -2835,11 +2835,11 @@ async fn blocked_queued_prompt_does_not_strand_earlier_accepted_prompt(
             body: sse_event(ev_output_text_delta("first ")),
         },
         StreamingSseChunk {
-            gate: None,
+            gate: Some(gate_completed_rx),
             body: sse_event(ev_message_item_done("msg-1", "first response")),
         },
         StreamingSseChunk {
-            gate: Some(gate_completed_rx),
+            gate: None,
             body: sse_event(ev_completed("resp-1")),
         },
     ];
@@ -2907,7 +2907,10 @@ async fn blocked_queued_prompt_does_not_strand_earlier_accepted_prompt(
     .into_iter()
     .collect::<Vec<_>>();
 
-    sleep(Duration::from_millis(100)).await;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
 
     assert_eq!(requests.len(), 2);
 
@@ -2924,25 +2927,30 @@ async fn blocked_queued_prompt_does_not_strand_earlier_accepted_prompt(
     let history = test.codex.conversation_history_snapshot().await;
     assert_eq!(history.retained_context().is_some(), thread_context_enabled);
     let retained = serde_json::to_value(history.retained_context().cloned().unwrap_or_default())?;
+    let messages = retained["user_messages"]
+        .as_array()
+        .expect("retained user messages");
     assert_eq!(
-        retained["user_messages"]
-            .as_array()
-            .expect("retained user messages")
+        messages
             .iter()
-            .map(|message| (message["order"].clone(), message["text"].clone()))
+            .map(|message| message["text"].clone())
             .collect::<Vec<_>>(),
         if thread_context_enabled {
-            vec![
-                (json!(0), json!("initial prompt")),
-                (json!(1), json!("accepted queued prompt")),
-            ]
+            vec![json!("initial prompt"), json!("accepted queued prompt")]
         } else {
             Vec::new()
         },
     );
+    assert!(
+        messages
+            .windows(2)
+            .all(|pair| pair[0]["order"].as_u64() < pair[1]["order"].as_u64())
+    );
     assert_eq!(
         retained["next_order"],
-        json!(if thread_context_enabled { 3 } else { 0 })
+        // Three accepted input positions (including the blocked prompt), then
+        // the two completed assistant messages.
+        json!(if thread_context_enabled { 5 } else { 0 })
     );
 
     let hook_inputs = read_user_prompt_submit_hook_inputs(test.codex_home_path())?;

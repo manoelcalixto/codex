@@ -3,6 +3,7 @@ mod capability_discovery;
 mod capability_discovery_cache;
 mod client;
 mod client_api;
+mod client_error;
 mod client_telemetry;
 mod client_transport;
 mod connection;
@@ -45,6 +46,9 @@ mod shell_snapshot;
 mod telemetry;
 mod trace_context;
 mod websocket_pong_watchdog;
+
+// Shared limits for inbound executor messages across all transports.
+mod client_inbound_request_limit;
 
 use codex_exec_server_protocol as protocol;
 

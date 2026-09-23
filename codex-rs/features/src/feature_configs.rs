@@ -135,7 +135,7 @@ pub struct GuardianV2ConfigToml {
     /// Legacy setting retained for config compatibility; the backend now controls Guardian billing.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub free_guardian: Option<bool>,
-    /// Use thread-owned context for sync and async Guardian. Defaults to false.
+    /// Use thread-owned context for sync and async Guardian. Defaults to true.
     /// Independent of the Guardian v2 `enabled` toggle.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thread_context: Option<bool>,
@@ -293,6 +293,9 @@ pub struct MultiAgentV2ConfigToml {
     /// Expose the multi-agent v2 `wait_agent` tool.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wait_agent_enabled: Option<bool>,
+    /// Disable the model's direct-message tools; spawning and automatic child results remain available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disable_direct_message: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub non_code_mode_only: Option<bool>,
 }
