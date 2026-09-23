@@ -16,7 +16,7 @@ This catalog lists every statically defined model tool in Codex's core registry 
 | `followup_task` | `features.multi_agent_v2` or model-selected v2. | `function` | Send a follow-up task to an existing non-root target agent and trigger a turn if it is idle. If the target is already running, deliver the task promptly at message boundaries while sampling, or after the pending tool call completes. | `codex-rs/core/src/tools/handlers/multi_agents_spec.rs` |
 | `get_context_remaining` | `features.token_budget`. | `function` | Get the remaining tokens in the current context window. | `codex-rs/core/src/tools/handlers/get_context_remaining_spec.rs` |
 | `get_goal` | `features.goals` + persistent state. | `function` | Get the current goal for this thread, including status, budgets, token and elapsed-time usage, and remaining token budget. | `codex-rs/ext/goal/src/spec.rs` |
-| `image_gen.imagegen` | `features.image_generation` + provider, model, and auth capabilities. | `function` | The `image_gen.imagegen` tool enables image generation from descriptions and editing of existing images based on specific instructions. Use it when:<br><br>- The user requests an image based on a scene description, such as a diagram, portrait, comic, meme, or any other visual.<br>- The user wants to modify an attached or previously generated image with specific changes, including adding or removing elements, altering colors, improving quality/resolution, or transforming the style (e.g., cartoon, oil painting).<br><br>Guidelines:<br>- imagegen needs a few minutes to finish. In code-mode, use the first-line @exec directive to give the initial call 120 seconds and the same yield for any waits that follow. Once it finishes, return the image with generatedImage(result).<br>- Omit both `referenced_image_paths` and `num_last_images_to_include` when generating a brand new image.<br>- For edits, use `referenced_image_paths` when every target image has a local file path.<br>- If you have not seen a local image yet, use `view_image` to inspect it before editing.<br>- Use `num_last_images_to_include` only when at least one target image has no local file path.<br>- Set `num_last_images_to_include` to the smallest number of recent conversation images that includes every target image, up to 5.<br>- Never provide both `referenced_image_paths` and `num_last_images_to_include`.<br>- If neither mechanism can include every target image, ask the user to attach the missing images again.<br>- Directly generate the image without reconfirmation or clarification unless required images must be attached again.<br>- Always use this tool for image editing unless the user explicitly requests otherwise. Do not use the `python` tool for image editing unless specifically instructed. | `codex-rs/ext/image-generation/src/tool.rs` |
+| `image_gen.imagegen` | `features.image_generation` + provider, model, and auth capabilities. | `function` | The `image_gen.imagegen` tool enables image generation from descriptions and editing of existing images based on specific instructions. Use it when:<br><br>- The user requests an image based on a scene description, such as a diagram, portrait, comic, meme, or any other visual.<br>- The user wants to modify an attached or previously generated image with specific changes, including adding or removing elements, altering colors, improving quality/resolution, or transforming the style (e.g., cartoon, oil painting).<br><br>Guidelines:<br>- imagegen needs a few minutes to finish. In code-mode, use the first-line @exec directive to give the initial call 120 seconds and the same yield for any waits that follow. Once it finishes, return the image with generatedImage(result).<br>- Avoid printing the full result or its base64 image data with `text()` or `notify()`; print only small metadata when needed.<br>- Set `transparent_background` to true when the request calls for a transparent background, including background removal or a cutout; set it to false otherwise. For edits, preserve existing transparency unless the user asks to change it.<br>- Omit both `referenced_image_paths` and `num_last_images_to_include` when generating a brand new image.<br>- For edits, use `referenced_image_paths` when every target image has a local file path.<br>- If you have not seen a local image yet, use `view_image` to inspect it before editing.<br>- Use `num_last_images_to_include` only when at least one target image has no local file path.<br>- Set `num_last_images_to_include` to the smallest number of recent conversation images that includes every target image, up to 5.<br>- Never provide both `referenced_image_paths` and `num_last_images_to_include`.<br>- If neither mechanism can include every target image, ask the user to attach the missing images again.<br>- Directly generate the image without reconfirmation or clarification unless required images must be attached again.<br>- Always use this tool for image editing unless the user explicitly requests otherwise. Do not use the `python` tool for image editing unless specifically instructed. | `codex-rs/ext/image-generation/src/tool.rs` |
 | `interrupt_agent` | `features.multi_agent_v2` or model-selected v2. | `function` | Interrupt an agent's current turn, if any, and return its previous status. The agent remains available for messages and follow-up tasks. | `codex-rs/core/src/tools/handlers/multi_agents_spec.rs` |
 | `list_agents` | `features.multi_agent_v2` or model-selected v2. | `function` | List live agents in the current root thread tree. Optionally filter by task-path prefix. | `codex-rs/core/src/tools/handlers/multi_agents_spec.rs` |
 | `list_available_plugins_to_install` | `features.tool_suggest`, `features.apps`, and `features.plugins`. | `function` | # List plugin/connector install candidates<br><br>Use this tool only when both are true:<br>- The user explicitly asks to use a specific plugin or connector that is not already available in the current context or active `tools` list.<br>- `tool_search` is not available, or it has already been called and did not find or make the requested tool callable.<br><br>Returns known plugins and connectors that can be passed to `request_plugin_install`. When both a plugin and a connector match, prefer the plugin; use the connector only when its corresponding plugin is already installed. | `codex-rs/core/src/tools/handlers/list_available_plugins_to_install_spec.rs` |
@@ -36,7 +36,7 @@ This catalog lists every statically defined model tool in Codex's core registry 
 | `request_permissions` | `features.request_permissions_tool` + execution environment. | `function` | _Description is generated at runtime or is not available._ | `codex-rs/core/src/tools/handlers/shell_spec.rs` |
 | `request_plugin_install` | `features.tool_suggest`, `features.apps`, and `features.plugins`. | `function` | _Description is generated at runtime or is not available._ | `codex-rs/core/src/tools/handlers/request_plugin_install_spec.rs` |
 | `request_user_input` | `tools.experimental_request_user_input.enabled`; Default mode also uses `features.default_mode_request_user_input`. | `function` | _Description is generated at runtime or is not available._ | `codex-rs/core/src/tools/handlers/request_user_input_spec.rs` |
-| `request_user_input_async` | No dedicated feature; availability is runtime-defined. | `function` | Ask the user one or more questions during ongoing work. Use this tool only to request missing information, preferences, constraints, clarification, or approval. The tool returns immediately without ending the turn or waiting for a reply; any reply arrives asynchronously as a new user message. Keep questions concise, self-contained, and easy to understand, using a level of detail appropriate to the user and task. The UI always allows a free-text answer, including when suggested options are provided. A preselected option is not submitted automatically. | `codex-rs/core/src/tools/handlers/request_user_input_async.rs` |
+| `request_user_input_async` | No dedicated feature; availability is runtime-defined. | `function` | _Description is generated at runtime or is not available._ | `codex-rs/core/src/tools/handlers/request_user_input_async.rs` |
 | `send_message` | `features.multi_agent_v2` or model-selected v2. | `function` | Send a message to an existing agent. The message will be delivered promptly. Does not trigger a new turn. | `codex-rs/core/src/tools/handlers/multi_agents_spec.rs` |
 | `send_message_to_user_async` | No dedicated feature; availability is runtime-defined. | `function` | Send a concise message that needs the user's attention during ongoing work. The tool returns immediately without ending the turn or waiting for a reply; any reply arrives asynchronously as a new user message. Use this tool to report a critical blocker or a finding that may change the task's direction, or to answer a user question or status request received while work is still in progress. Use this tool when a message needs the user's immediate attention; use commentary for routine progress and intermediate context. Use clear formatting, such as bolding questions, to make requests easy to notice and answer. | `codex-rs/core/src/tools/handlers/send_message_to_user_async.rs` |
 | `skills.list` | No dedicated feature; enabled skill provider/orchestrator setting. | `function` | List skills owned by the requested authority. Returns each skill's authority, package, and main_resource. Pass the package to skills.read, and pass next_cursor back as cursor to continue. | `codex-rs/ext/skills/src/tools/list.rs` |
@@ -110,7 +110,7 @@ Some(json!({
                     },
                     "required": ["current_time"],
                     "additionalProperties": false
-                }))
+                }).into())
 ```
 
 ### `clock.sleep`
@@ -298,7 +298,7 @@ fn unified_exec_output_schema() -> Value {
     })
 }
 
-Some(unified_exec_output_schema())
+Some(unified_exec_output_schema().into())
 ```
 
 ### `followup_task`
@@ -360,7 +360,7 @@ fn get_context_remaining_output_schema() -> Value {
     })
 }
 
-Some(get_context_remaining_output_schema())
+Some(get_context_remaining_output_schema().into())
 ```
 
 ### `get_goal`
@@ -386,6 +386,9 @@ schema_for::<ImagegenArgs>()
 
 struct ImagegenArgs {
     prompt: String,
+    /// Whether the output should have a transparent background. Defaults to false.
+    #[serde(default)]
+    transparent_background: bool,
     #[schemars(length(max = 5))]
     referenced_image_paths: Option<Vec<AbsolutePathBuf>>,
     #[schemars(range(min = 1, max = 5))]
@@ -431,9 +434,12 @@ fn agent_previous_status_output_schema(previous_status_description: &str) -> Val
     })
 }
 
-Some(agent_previous_status_output_schema(
-            "The agent status observed before the interrupt request was handled.",
-        ))
+Some(
+            agent_previous_status_output_schema(
+                "The agent status observed before the interrupt request was handled.",
+            )
+            .into(),
+        )
 ```
 
 ### `list_agents`
@@ -484,7 +490,7 @@ fn list_agents_output_schema() -> Value {
     })
 }
 
-Some(list_agents_output_schema())
+Some(list_agents_output_schema().into())
 ```
 
 ### `list_available_plugins_to_install`
@@ -716,9 +722,12 @@ fn agent_previous_status_output_schema(previous_status_description: &str) -> Val
     })
 }
 
-Some(agent_previous_status_output_schema(
-                "The agent status observed before shutdown was requested.",
-            ))
+Some(
+                agent_previous_status_output_schema(
+                    "The agent status observed before shutdown was requested.",
+                )
+                .into(),
+            )
 ```
 
 ### `multi_agent_v1.resume_agent`
@@ -748,7 +757,7 @@ fn resume_agent_output_schema() -> Value {
     })
 }
 
-Some(resume_agent_output_schema())
+Some(resume_agent_output_schema().into())
 ```
 
 ### `multi_agent_v1.send_input`
@@ -798,7 +807,7 @@ fn send_input_output_schema() -> Value {
     })
 }
 
-Some(send_input_output_schema())
+Some(send_input_output_schema().into())
 ```
 
 ### `multi_agent_v1.spawn_agent`
@@ -832,7 +841,7 @@ fn spawn_agent_output_schema_v1() -> Value {
     })
 }
 
-Some(spawn_agent_output_schema_v1())
+Some(spawn_agent_output_schema_v1().into())
 ```
 
 ### `multi_agent_v1.wait_agent`
@@ -893,7 +902,7 @@ fn wait_output_schema_v1() -> Value {
     })
 }
 
-Some(wait_output_schema_v1())
+Some(wait_output_schema_v1().into())
 ```
 
 ### `new_context`
@@ -1203,9 +1212,9 @@ fn spawn_agent_output_schema_v2(hide_agent_metadata: bool) -> Value {
     })
 }
 
-Some(spawn_agent_output_schema_v2(
-            options.hide_agent_type_model_reasoning,
-        ))
+Some(
+            spawn_agent_output_schema_v2(options.hide_agent_type_model_reasoning).into(),
+        )
 ```
 
 ### `test_sync_tool`
@@ -1390,7 +1399,7 @@ fn view_image_output_schema(options: ViewImageToolOptions) -> Value {
     schema
 }
 
-Some(view_image_output_schema(options))
+Some(view_image_output_schema(options).into())
 ```
 
 ### `wait`
@@ -1423,11 +1432,27 @@ let properties = BTreeMap::from([
         ),
     ]);
 
-JsonSchema::object(
-            properties,
-            Some(vec!["cell_id".to_string()]),
-            Some(false.into()),
-        )
+parameters_override
+            .and_then(
+                |parameters| match crate::tools::catalog_parameters::parse(parameters) {
+                    Ok(parameters) => Some(parameters),
+                    Err(reason) => {
+                        tracing::warn!(
+                            tool = codex_code_mode::WAIT_TOOL_NAME,
+                            reason,
+                            "Invalid catalog tool parameters; using bundled parameters"
+                        );
+                        None
+                    }
+                },
+            )
+            .unwrap_or_else(|| {
+                JsonSchema::object(
+                    properties,
+                    Some(vec!["cell_id".to_string()]),
+                    Some(false.into()),
+                )
+            })
 ```
 
 **Output**
@@ -1477,7 +1502,7 @@ fn wait_output_schema_v2() -> Value {
     })
 }
 
-Some(wait_output_schema_v2())
+Some(wait_output_schema_v2().into())
 ```
 
 ### `wait_for_environment`
@@ -1605,5 +1630,5 @@ fn unified_exec_output_schema() -> Value {
     })
 }
 
-Some(unified_exec_output_schema())
+Some(unified_exec_output_schema().into())
 ```
