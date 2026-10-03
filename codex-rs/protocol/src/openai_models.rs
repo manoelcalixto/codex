@@ -46,6 +46,7 @@ mod guardian_v2;
 mod reasoning_effort;
 
 pub use access_programs::ModelAccessPrograms;
+pub use guardian_v2::AsyncClassifierMode;
 pub use guardian_v2::GuardianV2ModelConfig;
 pub use guardian_v2::GuardianV2TranscriptModelConfig;
 
@@ -542,6 +543,10 @@ impl ModelInfo {
 /// retained to decode catalogs produced before personality selection was removed.
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq, TS, JsonSchema)]
 pub struct ModelMessages {
+    /// Developer guidance after a content-filter block. Missing, null, blank, or values over
+    /// 512 UTF-8 bytes use the bundled guidance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_filter_guidance: Option<String>,
     /// Additional developer instructions for persistent mode. Missing or null uses the built-in
     /// instructions; an empty string disables them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -587,6 +592,8 @@ pub struct ToolMessages {
     pub multi_agent: Option<MultiAgentToolMessages>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code_mode: Option<CodeModeToolMessages>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_resources: Option<McpResourceToolMessages>,
 }
 
 /// Plain-text prefixes for Code Mode documentation, ALL_TOOLS, and loaded tool-search namespaces.
@@ -611,7 +618,8 @@ pub struct ToolMessage {
     /// text without disabling the tool. Tool-owned runtime guidance is retained.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// Complete JSON Schema encoded as a string. Consumed by Multi-Agent V2 tools and Code Mode wait.
+    /// Complete JSON Schema encoded as a string. Consumed by Multi-Agent V2 tools, Code Mode wait,
+    /// request_user_input_async (the send_user_message_async catalog key), and MCP resource helpers.
     /// Uses the harness's supported schema subset; unrecognized keywords are ignored.
     /// Missing, null, invalid or unsupported structures, or a root without `type: "object"`
     /// retains the harness parameters. Schema semantics must remain API-compatible.
@@ -682,6 +690,17 @@ impl MultiAgentToolMessages {
         }
         .as_ref()
     }
+}
+
+/// Model-owned descriptions and parameters for the built-in MCP resource helpers.
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq, TS, JsonSchema)]
+pub struct McpResourceToolMessages {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub list_mcp_resources: Option<ToolMessage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub list_mcp_resource_templates: Option<ToolMessage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_mcp_resource: Option<ToolMessage>,
 }
 
 /// Model-owned instructions for Code Mode's exec and wait tools.
@@ -1489,6 +1508,7 @@ mod tests {
     #[test]
     fn models_response_prefers_template_and_preserves_message_siblings() {
         let messages = ModelMessages {
+            content_filter_guidance: Some("Offer a permitted alternative.".to_string()),
             persistent_instructions: Some("Persistent catalog instructions".to_string()),
             tools: Some(ToolMessages {
                 send_user_message_async: Some(ToolMessage {

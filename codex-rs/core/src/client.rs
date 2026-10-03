@@ -32,7 +32,11 @@ use std::sync::OnceLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
+#[path = "client_tool_metadata.rs"]
+mod tool_metadata;
+
 use crate::CodexResponsesHeaders;
+use crate::tools::ExecutedToolCalls;
 use async_channel::Sender;
 use codex_api::AgentIdentityTelemetry;
 use codex_api::ApiError;
@@ -95,7 +99,6 @@ use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::W3cTraceContext;
 use codex_rollout_trace::InferenceTraceAttempt;
 use codex_rollout_trace::InferenceTraceContext;
-use codex_tools::create_tools_json_for_responses_api;
 use codex_tools::create_tools_json_for_responses_lite;
 use codex_tools::create_tools_raw_json_for_responses_api;
 use eventsource_stream::Event;
@@ -266,6 +269,10 @@ pub struct ModelClient {
     event_sender: Option<Sender<ProtocolEvent>>,
     http_client_factory: HttpClientFactory,
     restored_history: bool,
+    request_contributors: Vec<Arc<dyn codex_extension_api::ModelRequestContributor>>,
+    executed_tool_calls: Option<ExecutedToolCalls>,
+    // Resolved once when the session is created, like other session feature flags.
+    api_key_cyber_access_programs: cyber_access_program::ApiKeyCyberAccessPrograms,
 }
 
 /// A turn-scoped streaming session created from a [`ModelClient`].
@@ -405,16 +412,6 @@ fn response_items_equal_ignoring_internal_metadata(
     previous == current
 }
 
-/// Whether the resolved outbound Responses destination may receive internal tool metadata.
-fn is_internal_metadata_destination(provider: &ApiProvider) -> bool {
-    url::Url::parse(&provider.base_url).ok().is_some_and(|url| {
-        url.scheme() == "https"
-            && url.host_str().is_some_and(|host| {
-                host == "api.openai.com" || codex_http_client::is_allowed_chatgpt_host(host)
-            })
-    })
-}
-
 impl WebsocketSession {
     fn reset(&mut self, reason: Option<&'static str>) {
         // Per-socket backend metrics call a resend after reconnect "initial".
@@ -496,6 +493,7 @@ impl ModelClient {
         attestation_provider: Option<Arc<dyn AttestationProvider>>,
         http_client_factory: HttpClientFactory,
         workspace_routing: WorkspaceRoutingContext,
+        request_contributors: Vec<Arc<dyn codex_extension_api::ModelRequestContributor>>,
     ) -> Self {
         let model_provider = create_model_provider(provider_info, auth_manager);
         let codex_api_key_env_enabled = model_provider
@@ -542,7 +540,16 @@ impl ModelClient {
             event_sender: None,
             http_client_factory,
             restored_history: false,
+            request_contributors,
+            executed_tool_calls: None,
+            api_key_cyber_access_programs:
+                cyber_access_program::ApiKeyCyberAccessPrograms::UnsupportedProvider,
         }
+    }
+
+    pub(crate) fn with_executed_tool_calls(mut self, recorder: ExecutedToolCalls) -> Self {
+        self.executed_tool_calls = Some(recorder);
+        self
     }
 
     pub(crate) fn reasoning_effort_override_enabled(&self, model_info: &ModelInfo) -> bool {
@@ -561,10 +568,12 @@ impl ModelClient {
         prompt_cache_key_override: Option<String>,
         event_sender: Sender<ProtocolEvent>,
         codex_responses_headers: Option<Arc<CodexResponsesHeaders>>,
+        api_key_cyber_access_programs: cyber_access_program::ApiKeyCyberAccessPrograms,
     ) -> Self {
         self.prompt_cache_key_override = prompt_cache_key_override;
         self.event_sender = Some(event_sender);
         self.codex_responses_headers = codex_responses_headers;
+        self.api_key_cyber_access_programs = api_key_cyber_access_programs;
         self
     }
 
@@ -902,19 +911,18 @@ impl ModelClient {
                 &Uuid::NAMESPACE_OID,
                 self.state.thread_id.to_string().as_bytes(),
             );
-            let tools = if self.state.provider.capabilities().namespace_tools {
-                create_tools_json_for_responses_lite(&prompt.tools)?
-            } else {
-                create_tools_json_for_responses_api(&prompt.tools)?
-            };
-            let mut prefix = vec![ResponseItem::AdditionalTools {
-                id: Some(ResponseItemId::with_suffix(
-                    "at",
-                    Uuid::new_v5(&prefix_namespace, &serde_json::to_vec(&tools)?),
-                )),
-                role: "developer".to_string(),
-                tools,
-            }];
+            let mut prefix = Vec::new();
+            if !prompt.tools.is_empty() {
+                let tools = create_tools_json_for_responses_lite(&prompt.tools)?;
+                prefix.push(ResponseItem::AdditionalTools {
+                    id: Some(ResponseItemId::with_suffix(
+                        "at",
+                        Uuid::new_v5(&prefix_namespace, &serde_json::to_vec(&tools)?),
+                    )),
+                    role: "developer".to_string(),
+                    tools,
+                });
+            }
             if !prompt.base_instructions.text.is_empty() {
                 let mut instructions = ContextualUserFragment::into(BaseInstructionsFragment(
                     prompt.base_instructions.text.clone(),
@@ -970,12 +978,17 @@ impl ModelClient {
             prompt.output_schema_strict,
         );
         let prompt_cache_key = Some(self.prompt_cache_key(responses_metadata));
-        let service_tier = if self.state.provider.info().is_amazon_bedrock() {
-            // Bedrock only supports the implicit default tier, including with custom catalogs.
-            None
-        } else {
-            model_info.service_tier_for_request(service_tier)
-        };
+        let service_tier = model_info
+            .service_tier_for_request(service_tier)
+            .filter(|tier| {
+                // Bedrock requires an advertised tier, including for flex, which the
+                // generic OpenAI resolver permits without catalog support.
+                !self.state.provider.info().is_amazon_bedrock()
+                    || model_info
+                        .service_tiers
+                        .iter()
+                        .any(|supported| supported.id == *tier)
+            });
         if !include_internal {
             for item in &mut input {
                 item.clear_tool_result_metadata();
@@ -1660,7 +1673,11 @@ impl ModelClientSession {
                 .client
                 .current_client_setup(ClientRouting::Workspace)
                 .await?;
-            let include_internal = is_internal_metadata_destination(&client_setup.api_provider);
+            let include_internal = self
+                .client
+                .state
+                .provider
+                .include_internal_metadata(&client_setup.api_provider);
             let responses_headers = self
                 .client
                 .responses_headers(client_setup.auth.as_ref(), &model_info.slug);
@@ -1722,7 +1739,8 @@ impl ModelClientSession {
             request.access_programs = cyber_access_program::for_auth(
                 client_setup.auth.as_ref(),
                 prompt.cyber_access_program,
-            );
+                self.client.api_key_cyber_access_programs,
+            )?;
             self.client
                 .prepare_response_items_for_request(&mut request.input);
             if crate::guardian::is_basic_session_source(&self.client.state.session_source) {
@@ -1731,8 +1749,21 @@ impl ModelClientSession {
             let request_session_telemetry =
                 session_telemetry_for_request(session_telemetry, &request);
             options.extra_headers.extend(responses_headers);
+            let interceptors = crate::model_request::prepare(
+                &self.client.request_contributors,
+                &self.client.state.thread_id.to_string(),
+                &model_info.slug,
+                codex_extension_api::ModelRequestKind::Generation,
+                &mut request.client_metadata,
+            );
             let inference_trace_attempt = inference_trace.start_attempt();
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
+            if let Some(input) = tool_metadata::bounded_input(&request, &request.input) {
+                if let Some(recorder) = &self.client.executed_tool_calls {
+                    recorder.invalidate_wire_inventory_loss(&request.input, &input);
+                }
+                request.input = input;
+            }
             inference_trace_attempt.record_started(&request);
             let client = ApiResponsesClient::new(
                 transport,
@@ -1749,6 +1780,7 @@ impl ModelClientSession {
                         request_session_telemetry,
                         inference_trace_attempt,
                         Arc::clone(&self.client.state.provider),
+                        interceptors,
                     );
                     return Ok(stream);
                 }
@@ -1823,6 +1855,7 @@ impl ModelClientSession {
         request_trace: Option<W3cTraceContext>,
         inference_trace: &InferenceTraceContext,
     ) -> Result<WebsocketStreamOutcome> {
+        let after_prewarm = !warmup && self.websocket_session.last_response_from_untraced_warmup;
         let provider = Arc::clone(&self.client.state.provider);
         let auth_manager = provider.auth_manager();
 
@@ -1836,7 +1869,11 @@ impl ModelClientSession {
                 .client
                 .current_client_setup(ClientRouting::Workspace)
                 .await?;
-            let include_internal = is_internal_metadata_destination(&client_setup.api_provider);
+            let include_internal = self
+                .client
+                .state
+                .provider
+                .include_internal_metadata(&client_setup.api_provider);
             let responses_headers = self
                 .client
                 .responses_headers(client_setup.auth.as_ref(), &model_info.slug);
@@ -1862,7 +1899,8 @@ impl ModelClientSession {
             request.access_programs = cyber_access_program::for_auth(
                 client_setup.auth.as_ref(),
                 prompt.cyber_access_program,
-            );
+                self.client.api_key_cyber_access_programs,
+            )?;
             let mut websocket_metadata = responses_metadata.clone();
             websocket_metadata.routing_hint = self.client.build_routing_hint_header(
                 client_setup.auth.as_ref(),
@@ -1998,8 +2036,28 @@ impl ModelClientSession {
                 client_setup.auth.as_ref(),
                 &responses_headers,
             );
+            let interceptors = crate::model_request::prepare(
+                &self.client.request_contributors,
+                &self.client.state.thread_id.to_string(),
+                &model_info.slug,
+                if warmup {
+                    codex_extension_api::ModelRequestKind::Warmup
+                } else {
+                    codex_extension_api::ModelRequestKind::Generation
+                },
+                &mut ws_payload.client_metadata,
+            );
             let mut ws_request = ResponsesWsRequest::ResponseCreate(ws_payload);
             stamp_ws_stream_request_start_ms(&mut ws_request);
+            let ResponsesWsRequest::ResponseCreate(payload) = &ws_request;
+            let bounded_input = tool_metadata::bounded_input(&ws_request, payload.input);
+            if let Some(input) = bounded_input.as_deref() {
+                if let Some(recorder) = &self.client.executed_tool_calls {
+                    recorder.invalidate_wire_inventory_loss(payload.input, input);
+                }
+                let ResponsesWsRequest::ResponseCreate(payload) = &mut ws_request;
+                payload.input = input;
+            }
             if !previous_response_id_from_untraced_warmup {
                 inference_trace_attempt.record_started(&ws_request);
             }
@@ -2017,6 +2075,10 @@ impl ModelClientSession {
                     ("mode", mode),
                     ("reason", reason),
                     ("phase", if warmup { "warmup" } else { "generation" }),
+                    (
+                        "after_prewarm",
+                        if after_prewarm { "true" } else { "false" },
+                    ),
                 ],
             );
             let stream_result = websocket_connection
@@ -2048,6 +2110,7 @@ impl ModelClientSession {
                 request_session_telemetry,
                 inference_trace_attempt,
                 Arc::clone(&self.client.state.provider),
+                interceptors,
             );
             self.websocket_session.last_response_rx = Some(last_request_rx);
             return Ok(WebsocketStreamOutcome::Stream(stream));
@@ -2089,6 +2152,18 @@ impl ModelClientSession {
         websocket_telemetry
     }
 
+    /// Whether a previous request prepared a connection that is not known to be closed.
+    /// The next request still validates provider, auth, and headers before reuse.
+    pub(crate) async fn is_websocket_prewarmed(&self) -> bool {
+        if self.websocket_session.last_request.is_some()
+            && let Some(connection) = self.websocket_session.connection.as_ref()
+        {
+            !connection.is_closed().await
+        } else {
+            false
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn prewarm_websocket(
         &mut self,
@@ -2103,7 +2178,7 @@ impl ModelClientSession {
         if !self.client.responses_websocket_enabled() {
             return Ok(());
         }
-        if self.websocket_session.last_request.is_some() {
+        if self.is_websocket_prewarmed().await {
             return Ok(());
         }
 
@@ -2283,26 +2358,23 @@ const RESPONSE_STREAM_CHANNEL_CAPACITY: usize = 1600;
 const STREAM_DROPPED_REASON: &str = "response stream dropped before provider terminal event";
 
 fn map_response_stream(
-    api_stream: codex_api::ResponseStream,
+    mut api_stream: codex_api::ResponseStream,
     session_telemetry: SessionTelemetry,
     inference_trace_attempt: InferenceTraceAttempt,
     provider: SharedModelProvider,
+    interceptors: Vec<Box<dyn codex_extension_api::ModelResponseInterceptor>>,
 ) -> (ResponseStream, oneshot::Receiver<LastResponse>) {
-    let codex_api::ResponseStream {
-        rx_event,
+    let upstream_request_id = api_stream.upstream_request_id.take();
+    let interrupt = api_stream.interrupt.take();
+    let (mut stream, last_response) = map_response_events(
         upstream_request_id,
-    } = api_stream;
-    let api_stream = codex_api::ResponseStream {
-        rx_event,
-        upstream_request_id: None,
-    };
-    map_response_events(
-        upstream_request_id,
-        api_stream,
+        crate::model_request::intercept_stream(Box::pin(api_stream), interceptors),
         session_telemetry,
         inference_trace_attempt,
         provider,
-    )
+    );
+    stream.interrupt = interrupt;
+    (stream, last_response)
 }
 
 fn map_response_events<S>(
@@ -2449,6 +2521,7 @@ where
     (
         ResponseStream {
             rx_event,
+            interrupt: None,
             consumer_dropped: consumer_dropped_for_stream,
         },
         rx_last_response,

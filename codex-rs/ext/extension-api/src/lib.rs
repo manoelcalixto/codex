@@ -7,6 +7,7 @@ mod tool_policy;
 mod turn_admission;
 mod user_instructions;
 
+pub use session_isolation::IsolatedSessionExtensions;
 pub use session_isolation::SessionIsolation;
 pub use tool_policy::ToolPolicy;
 
@@ -61,6 +62,8 @@ pub use contributors::PreviousWorldStateSection;
 pub use contributors::PromptFragment;
 pub use contributors::PromptSlot;
 pub use contributors::RenderedWorldStateFragment;
+pub use contributors::SelectedPlugin;
+pub use contributors::SelectedPluginContribution;
 pub use contributors::SelectedPluginIdentity;
 pub use contributors::SelectedPluginSnapshot;
 pub use contributors::SkillInvocationContributor;
@@ -110,3 +113,12 @@ pub use user_instructions::ThreadInstructionsProvider;
 pub use user_instructions::UserInstructionsProvider;
 
 pub use contributors::ToolDispatchInput;
+
+mod model_request;
+pub use model_request::ModelRequestContributor;
+pub use model_request::ModelRequestInput;
+pub use model_request::ModelRequestKind;
+pub use model_request::ModelResponseError;
+pub use model_request::ModelResponseInterceptor;
+pub use model_request::ModelResponseStream;
+pub use model_request::ResponseEvent;
