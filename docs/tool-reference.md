@@ -1028,13 +1028,7 @@ None
 **Input**
 
 ```rust
-let properties = BTreeMap::from([("questions".to_string(), questions)]);
-
-JsonSchema::object(
-                properties,
-                Some(vec!["questions".to_string()]),
-                /*additional_properties*/ Some(false.into()),
-            )
+parse_tool_input_schema_without_compaction(&commands_schema())
 ```
 
 **Output**

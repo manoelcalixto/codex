@@ -56,8 +56,12 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `apps_mcp_product_sku` | <code>string</code> | Optional product SKU forwarded on host-owned Codex Apps MCP requests. |
 | `audio` | <code>table</code> | Machine-local realtime audio device preferences used by realtime voice. |
 | `audio.microphone` | <code>string</code> | _No description available._ |
+| `audio.microphone_channel` | <code>integer or array&lt;integer&gt;</code> | One-based microphone channels to mix; unset mixes all input channels. |
 | `audio.speaker` | <code>string</code> | _No description available._ |
 | `auto_review` | <code>table</code> | Optional policy instructions for the guardian auto-reviewer. |
+| `auto_review.circuit_break_action` | <code>string (&quot;default&quot;, &quot;strict&quot;)</code> | Controls whether circuit-breaker interruptions include a structured error. Strict mode writes structured errors that older clients may not recognize when reading shared history. Defaults to `default`. |
+| `auto_review.conversation_history_max_output_tokens` | <code>integer</code> | Maximum estimated tokens per Guardian history-tool response, before the standard serialization allowance. Defaults to 4,000; stricter parent tool limits still apply. |
+| `auto_review.experimental_conversation_history_prompt` | <code>string</code> | Experimental replacement for the history-retrieval instructions when history tools and Apps are enabled. Omitted or blank values use the built-in prompt. |
 | `auto_review.experimental_policy_template` | <code>string</code> | Experimental full Guardian prompt template containing the tenant policy placeholder. |
 | `auto_review.extra_policy` | <code>string</code> | Additional policy text inserted into the Guardian template's `{{ extra_policy }}` slot. |
 | `auto_review.policy` | <code>string</code> | Additional policy instructions inserted into the guardian prompt. |
@@ -95,6 +99,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `computer_use.windows.exes[].binary_name` | <code>string</code> | _No description available._ |
 | `computer_use.windows.exes[].product_name` | <code>string</code> | _No description available._ |
 | `computer_use.windows.exes[].publisher_name` | <code>string</code> | _No description available._ |
+| `daybreak` | <code>boolean</code> | Default Daybreak preference for new threads and non-interactive turns. |
 | `default_permissions` | <code>string</code> | Default permissions profile to apply. Names starting with `:` refer to built-in profiles; other names are resolved from the `[permissions]` table. |
 | `desktop` | <code>table</code> | Opaque desktop settings stored alongside the rest of config.toml. |
 | `developer_instructions` | <code>string</code> | Developer instructions inserted as a `developer` role message. |
@@ -112,6 +117,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `features` | <code>table</code> | Centralized feature flags (new). Prefer this over individual toggles. |
 | `features.agent_message_board` | <code>boolean</code> | _No description available._ |
 | `features.analytics_plan_history` | <code>boolean</code> | _No description available._ |
+| `features.api_key_cyber_access_programs` | <code>boolean</code> | _No description available._ |
 | `features.api_key_model_discovery` | <code>boolean</code> | _No description available._ |
 | `features.apply_patch_freeform` | <code>boolean</code> | _No description available._ |
 | `features.apply_patch_preserve_line_endings` | <code>boolean</code> | _No description available._ |
@@ -123,6 +129,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `features.auth_elicitation` | <code>boolean</code> | _No description available._ |
 | `features.background_paginated_rollout_migration` | <code>boolean</code> | _No description available._ |
 | `features.bedrock_setup_wizard` | <code>boolean</code> | _No description available._ |
+| `features.browser_annotation_api` | <code>boolean</code> | _No description available._ |
 | `features.browser_use` | <code>boolean</code> | _No description available._ |
 | `features.browser_use_external` | <code>boolean</code> | _No description available._ |
 | `features.browser_use_full_cdp_access` | <code>boolean</code> | _No description available._ |
@@ -133,12 +140,14 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `features.code_mode.enabled` | <code>boolean</code> | _No description available._ |
 | `features.code_mode.excluded_tool_namespaces` | <code>array&lt;string&gt;</code> | Exact tool namespaces to omit from the code-mode nested tool surface. |
 | `features.code_mode.experimental_show_cell_overhead` | <code>boolean</code> | Show handler duration, code-mode host duration, and harness overhead in each code-mode cell response. Experimental: this option and the response format may change or be removed. |
+| `features.code_mode.tool_input_schema_max_bytes` | <code>integer</code> | Maximum UTF-8 bytes per rendered tool input type, with a 16,000-byte minimum and default. For ordinary MCP tools, this is also at least their server's explicitly configured input limit. |
 | `features.code_mode_buffered_exec` | <code>boolean</code> | _No description available._ |
 | `features.code_mode_host` | <code>boolean or table</code> | _No description available._ |
 | `features.code_mode_host.disable_in_process_fallback` | <code>boolean</code> | Keep code mode fail-closed when the standalone host is unavailable. |
 | `features.code_mode_host.enabled` | <code>boolean</code> | _No description available._ |
 | `features.code_mode_interrupt` | <code>boolean</code> | _No description available._ |
 | `features.code_mode_only` | <code>boolean</code> | _No description available._ |
+| `features.code_mode_only_strict_3p_tools` | <code>boolean</code> | _No description available._ |
 | `features.code_mode_prewarm` | <code>boolean</code> | _No description available._ |
 | `features.codex_apps_mcp_2026_07_28` | <code>boolean</code> | _No description available._ |
 | `features.codex_git_commit` | <code>boolean</code> | _No description available._ |
@@ -161,6 +170,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `features.cwd_relative_turn_diffs` | <code>boolean</code> | _No description available._ |
 | `features.daemon_auto_start` | <code>boolean</code> | _No description available._ |
 | `features.default_mode_request_user_input` | <code>boolean</code> | _No description available._ |
+| `features.defer_mailbox_preemption` | <code>boolean</code> | _No description available._ |
 | `features.deferred_executor` | <code>boolean</code> | _No description available._ |
 | `features.deferred_tool_world_state` | <code>boolean</code> | _No description available._ |
 | `features.elevated_windows_sandbox` | <code>boolean</code> | _No description available._ |
@@ -178,11 +188,15 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `features.fast_mode` | <code>boolean</code> | _No description available._ |
 | `features.goals` | <code>boolean</code> | _No description available._ |
 | `features.guardian_approval` | <code>boolean</code> | _No description available._ |
+| `features.guardian_conversation_history_tools` | <code>boolean</code> | _No description available._ |
 | `features.guardian_enhanced_node_repl_transcripts` | <code>boolean</code> | _No description available._ |
 | `features.guardian_ext` | <code>boolean</code> | _No description available._ |
 | `features.guardian_node_repl_transcript_images` | <code>boolean</code> | _No description available._ |
 | `features.guardian_reuse_parent_compaction` | <code>boolean</code> | _No description available._ |
+| `features.guardian_root_handoff_context` | <code>boolean</code> | _No description available._ |
 | `features.guardianv2` | <code>boolean or table</code> | Options: User-configurable prompt, approval, and context settings for Guardian v2. |
+| `features.guardianv2.async_classifier_conversation_token_limit` | <code>integer</code> | Reset retained async history when the next request exceeds this token estimate. Defaults to 100,000. Fresh requests remain subject to the model's input limit. |
+| `features.guardianv2.async_classifier_mode` | <code>string (&quot;snapshot&quot;, &quot;conversation&quot;)</code> | Classifier experiment override. Otherwise use the model default, then snapshots. |
 | `features.guardianv2.classifier_instructions` | <code>string</code> | _No description available._ |
 | `features.guardianv2.enabled` | <code>boolean</code> | _No description available._ |
 | `features.guardianv2.free_guardian` | <code>boolean</code> | Legacy setting retained for config compatibility; the backend now controls Guardian billing. |
@@ -197,7 +211,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `features.guardianv2.review_scope.computer_use_only` | <code>boolean</code> | Restrict asynchronous classification and fast approvals to browser and computer-use tools. |
 | `features.guardianv2.review_scope.sandboxed_exec_commands` | <code>boolean</code> | Include sandboxed shell command calls in Guardian v2 classification. |
 | `features.guardianv2.review_threshold` | <code>number</code> | _No description available._ |
-| `features.guardianv2.thread_context` | <code>boolean</code> | Use thread-owned context for sync and async Guardian. Defaults to true. Independent of the Guardian v2 `enabled` toggle. |
+| `features.guardianv2.thread_context` | <code>boolean</code> | Deprecated and ignored; thread-owned Guardian context is always enabled. |
 | `features.guardianv2.transcript` | <code>table</code> | Bounds and optional sources for the Guardian v2 conversation transcript. |
 | `features.guardianv2.transcript.include_images` | <code>boolean</code> | Include recent screenshots from messages and configured tool outputs. |
 | `features.guardianv2.transcript.max_message_entry_tokens` | <code>integer</code> | _No description available._ |
@@ -206,6 +220,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `features.guardianv2.transcript.max_tool_entry_tokens` | <code>integer</code> | _No description available._ |
 | `features.guardianv2.transcript.max_tool_transcript_tokens` | <code>integer</code> | _No description available._ |
 | `features.guardianv2.transcript.sources` | <code>array&lt;string (&quot;tool_calls&quot;, &quot;tool_outputs&quot;, &quot;reasoning&quot;)&gt;</code> | _No description available._ |
+| `features.guardianv2_decisions_comparison` | <code>boolean</code> | _No description available._ |
 | `features.hooks` | <code>boolean</code> | _No description available._ |
 | `features.image_detail_original` | <code>boolean</code> | _No description available._ |
 | `features.image_generation` | <code>boolean</code> | _No description available._ |
@@ -216,16 +231,21 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `features.in_app_dictation` | <code>boolean</code> | _No description available._ |
 | `features.in_app_local_automation` | <code>boolean</code> | _No description available._ |
 | `features.in_app_updates` | <code>boolean</code> | _No description available._ |
+| `features.in_app_voice` | <code>boolean</code> | _No description available._ |
+| `features.incremental_tools` | <code>boolean</code> | _No description available._ |
+| `features.instant_interrupt` | <code>boolean</code> | _No description available._ |
 | `features.item_ids` | <code>boolean</code> | _No description available._ |
 | `features.js_repl` | <code>boolean</code> | _No description available._ |
 | `features.js_repl_tools_only` | <code>boolean</code> | _No description available._ |
 | `features.local_thread_store_compression` | <code>boolean</code> | _No description available._ |
 | `features.local_thread_store_shared_compression` | <code>boolean</code> | _No description available._ |
+| `features.login_shell_package_path` | <code>boolean</code> | _No description available._ |
 | `features.mcp_2026_07_28` | <code>boolean</code> | _No description available._ |
 | `features.mcp_oauth_refresh_coordination` | <code>boolean</code> | _No description available._ |
 | `features.memories` | <code>boolean</code> | _No description available._ |
 | `features.memory_tool` | <code>boolean</code> | _No description available._ |
 | `features.mentions_v2` | <code>boolean</code> | _No description available._ |
+| `features.model_catalog_in_context` | <code>boolean</code> | _No description available._ |
 | `features.multi_agent` | <code>boolean</code> | _No description available._ |
 | `features.multi_agent_mode` | <code>boolean</code> | _No description available._ |
 | `features.multi_agent_v2` | <code>boolean or table</code> | _No description available._ |
@@ -236,6 +256,11 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `features.multi_agent_v2.hide_spawn_agent_metadata` | <code>boolean</code> | _No description available._ |
 | `features.multi_agent_v2.max_concurrent_threads_per_session` | <code>integer</code> | _No description available._ |
 | `features.multi_agent_v2.max_wait_timeout_ms` | <code>integer</code> | _No description available._ |
+| `features.multi_agent_v2.message_board_in_memory` | <code>boolean</code> | Keep the message board in memory for a training session, including ephemeral sessions. |
+| `features.multi_agent_v2.message_board_remote` | <code>table</code> | Use a session-scoped remote board instead of local storage. |
+| `features.multi_agent_v2.message_board_remote.bearer_token` | <code>string</code> | Board credential supplied directly by a runtime config override. |
+| `features.multi_agent_v2.message_board_remote.bearer_token_env_var` | <code>string</code> | Read the credential from this environment variable instead of bearer_token. |
+| `features.multi_agent_v2.message_board_remote.url` | <code>string</code> | _No description available._ |
 | `features.multi_agent_v2.min_wait_timeout_ms` | <code>integer</code> | _No description available._ |
 | `features.multi_agent_v2.multi_agent_mode_hint_text` | <code>string</code> | _No description available._ |
 | `features.multi_agent_v2.non_code_mode_only` | <code>boolean</code> | _No description available._ |
@@ -246,6 +271,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `features.multi_agent_v2.usage_hint_enabled` | <code>boolean</code> | Deprecated compatibility field. Its value is ignored. |
 | `features.multi_agent_v2.usage_hint_text` | <code>string</code> | _No description available._ |
 | `features.multi_agent_v2.wait_agent_enabled` | <code>boolean</code> | Expose the multi-agent v2 `wait_agent` tool. |
+| `features.multi_agent_v2_dynamic_tools` | <code>boolean</code> | _No description available._ |
 | `features.network_proxy` | <code>boolean or table</code> | _No description available._ |
 | `features.network_proxy.allow_local_binding` | <code>boolean</code> | Permits local servers and direct host-loopback connections and skips the proxy's additional private-network destination checks. Proxy domain rules still apply. Defaults to true for MXC, which cannot enforce false; otherwise defaults to false. |
 | `features.network_proxy.allow_upstream_proxy` | <code>boolean</code> | _No description available._ |
@@ -592,13 +618,16 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `mcp_servers.<key>.oauth.callback_port` | <code>integer</code> | Fixed callback port that takes precedence over Codex's global OAuth callback port. |
 | `mcp_servers.<key>.oauth.callback_url` | <code>string</code> | Registered callback URL associated with this OAuth client. |
 | `mcp_servers.<key>.oauth.client_id` | <code>string</code> | Explicit OAuth client identifier to present during authorization and token exchange. |
+| `mcp_servers.<key>.oauth.client_secret` | <code>string</code> | OAuth client secret used for token exchange with a pre-registered client. |
 | `mcp_servers.<key>.oauth_resource` | <code>string</code> | _No description available._ |
 | `mcp_servers.<key>.omit_tools_from` | <code>array&lt;string (&quot;code_mode&quot;, &quot;deferred&quot;, &quot;direct&quot;)&gt;</code> | _No description available._ |
 | `mcp_servers.<key>.required` | <code>boolean</code> | _No description available._ |
 | `mcp_servers.<key>.scopes` | <code>array&lt;string&gt;</code> | _No description available._ |
+| `mcp_servers.<key>.startup_readiness` | <code>string (&quot;connection&quot;, &quot;catalog&quot;)</code> | Whether startup requires a live connection or can use a valid cached tool catalog. |
 | `mcp_servers.<key>.startup_timeout_ms` | <code>integer</code> | _No description available._ |
 | `mcp_servers.<key>.startup_timeout_sec` | <code>number</code> | _No description available._ |
 | `mcp_servers.<key>.supports_parallel_tool_calls` | <code>boolean</code> | _No description available._ |
+| `mcp_servers.<key>.tool_input_schema_max_bytes` | <code>integer</code> | UTF-8 byte threshold for compacting each ordinary MCP tool input schema. Defaults to 5,000 bytes. Code Mode also uses an explicitly configured limit when rendering each tool's input type. Larger limits preserve more parameter descriptions. |
 | `mcp_servers.<key>.tool_timeout_sec` | <code>number</code> | _No description available._ |
 | `mcp_servers.<key>.tools` | <code>table</code> | _No description available._ |
 | `mcp_servers.<key>.tools.<key>` | <code>table</code> | Per-tool settings for a single MCP server tool. |
@@ -648,6 +677,9 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `model_providers.<key>.aws.profile` | <code>string</code> | AWS profile name to use. When unset, the AWS SDK default chain decides. |
 | `model_providers.<key>.aws.region` | <code>string</code> | AWS region to use for provider-specific endpoints. |
 | `model_providers.<key>.base_url` | <code>string</code> | Base URL for the provider's OpenAI-compatible API. |
+| `model_providers.<key>.capabilities` | <code>table</code> | Optional API capability overrides for a custom Responses-compatible provider. Unspecified capabilities retain their existing provider defaults. |
+| `model_providers.<key>.capabilities.external_web_access` | <code>boolean</code> | Whether hosted web search may access the live web. |
+| `model_providers.<key>.capabilities.remote_compaction` | <code>string (&quot;unsupported&quot;, &quot;v2&quot;)</code> | Remote context-compaction protocol; omission preserves provider defaults. |
 | `model_providers.<key>.env_http_headers` | <code>table</code> | Optional HTTP headers to include in requests to this provider where the (key, value) pairs are the header name and _environment variable_ whose value should be used. If the environment variable is not set, or the value is empty, the header will not be included in the request. |
 | `model_providers.<key>.env_http_headers.<key>` | <code>string</code> | _No description available._ |
 | `model_providers.<key>.env_key` | <code>string</code> | Environment variable that stores the user's API key for this provider. |
@@ -671,7 +703,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `model_providers.<key>.query_params` | <code>table</code> | Optional query parameters to append to the base URL. |
 | `model_providers.<key>.query_params.<key>` | <code>string</code> | _No description available._ |
 | `model_providers.<key>.request_max_retries` | <code>integer</code> | Maximum number of times to retry a failed HTTP request to this provider. |
-| `model_providers.<key>.requires_openai_auth` | <code>boolean</code> | Does this provider require an OpenAI API Key or ChatGPT login token? If true, user is presented with login screen on first run, and login preference and token/key are stored in auth.json. If false (which is the default), login screen is skipped, and API key (if needed) comes from the "env_key" environment variable. |
+| `model_providers.<key>.requires_openai_auth` | <code>boolean</code> | Does this provider require an OpenAI API key or ChatGPT login token? If true, the user is presented with a login screen on first run, and credentials are stored using the backend selected by `cli_auth_credentials_store`. If false (the default), the login screen is skipped, and the API key (if needed) comes from the environment variable specified by `env_key`. |
 | `model_providers.<key>.stream_idle_timeout_ms` | <code>integer</code> | Idle timeout (in milliseconds) to wait for activity on a streaming response before treating the connection as lost. |
 | `model_providers.<key>.stream_max_retries` | <code>integer</code> | Number of times to retry reconnecting a dropped streaming response before failing. |
 | `model_providers.<key>.supports_standalone_web_search` | <code>boolean</code> | Whether this provider supports the standalone web-search endpoint. |
@@ -726,6 +758,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `otel.exporter.otlp-http.tls.client-certificate` | <code>string</code> | A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).<br><br>IMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute. |
 | `otel.exporter.otlp-http.tls.client-private-key` | <code>string</code> | A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).<br><br>IMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute. |
 | `otel.log_agent_responses` | <code>boolean</code> | Opt in to logging final main-agent and spawned-subagent responses to an OTLP log exporter. Defaults to false. Response text can be sensitive and is capped at 64 KiB. |
+| `otel.log_guardian_assessments` | <code>boolean</code> | Opt in to logging completed Guardian assessments to an OTLP log exporter. Defaults to false. Rationales can be sensitive and are capped at 64 KiB. |
 | `otel.log_user_prompt` | <code>boolean</code> | Log user prompt in traces |
 | `otel.metrics_exporter` | <code>string or table</code> | Optional metrics exporter |
 | `otel.metrics_exporter.otlp-grpc` | <code>table</code> | _No description available._ |
@@ -780,12 +813,6 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `plugins.<key>.mcp_servers.<key>` | <code>table</code> | Policy settings for a plugin-provided MCP server.<br><br>This intentionally excludes transport settings: plugin manifests own how the MCP server is launched, while host config owns enablement, auth, and tool policy. |
 | `plugins.<key>.mcp_servers.<key>.default_tools_approval_mode` | <code>string (&quot;auto&quot;, &quot;prompt&quot;, &quot;writes&quot;, &quot;approve&quot;)</code> | Approval mode for tools in this server unless a tool override exists. |
 | `plugins.<key>.mcp_servers.<key>.disabled_tools` | <code>array&lt;string&gt;</code> | Explicit deny-list of tools. These tools are removed after applying `enabled_tools`. |
-| `plugins.<key>.mcp_servers.<key>.ema_auth` | <code>table</code> | Host-configured EMA registration; the plugin still owns its endpoint. |
-| `plugins.<key>.mcp_servers.<key>.ema_auth.authorization_server_issuer` | <code>string</code> | _No description available._ |
-| `plugins.<key>.mcp_servers.<key>.ema_auth.client_id` | <code>string</code> | _No description available._ |
-| `plugins.<key>.mcp_servers.<key>.ema_auth.resource` | <code>string</code> | _No description available._ |
-| `plugins.<key>.mcp_servers.<key>.ema_auth.scopes` | <code>array&lt;string&gt;</code> | _No description available._ |
-| `plugins.<key>.mcp_servers.<key>.ema_auth.url` | <code>string</code> | Exact plugin endpoint approved by the host; never overrides the declaration. |
 | `plugins.<key>.mcp_servers.<key>.enabled` | <code>boolean</code> | When `false`, Codex skips initializing this plugin MCP server. |
 | `plugins.<key>.mcp_servers.<key>.enabled_tools` | <code>array&lt;string&gt;</code> | Explicit allow-list of tools exposed from this server. |
 | `plugins.<key>.mcp_servers.<key>.tools` | <code>table</code> | Per-tool policy settings keyed by tool name. |
@@ -811,6 +838,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `profiles.<key>.features` | <code>table</code> | Optional feature toggles scoped to this profile. |
 | `profiles.<key>.features.agent_message_board` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.analytics_plan_history` | <code>boolean</code> | _No description available._ |
+| `profiles.<key>.features.api_key_cyber_access_programs` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.api_key_model_discovery` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.apply_patch_freeform` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.apply_patch_preserve_line_endings` | <code>boolean</code> | _No description available._ |
@@ -822,6 +850,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `profiles.<key>.features.auth_elicitation` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.background_paginated_rollout_migration` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.bedrock_setup_wizard` | <code>boolean</code> | _No description available._ |
+| `profiles.<key>.features.browser_annotation_api` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.browser_use` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.browser_use_external` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.browser_use_full_cdp_access` | <code>boolean</code> | _No description available._ |
@@ -832,12 +861,14 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `profiles.<key>.features.code_mode.enabled` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.code_mode.excluded_tool_namespaces` | <code>array&lt;string&gt;</code> | Exact tool namespaces to omit from the code-mode nested tool surface. |
 | `profiles.<key>.features.code_mode.experimental_show_cell_overhead` | <code>boolean</code> | Show handler duration, code-mode host duration, and harness overhead in each code-mode cell response. Experimental: this option and the response format may change or be removed. |
+| `profiles.<key>.features.code_mode.tool_input_schema_max_bytes` | <code>integer</code> | Maximum UTF-8 bytes per rendered tool input type, with a 16,000-byte minimum and default. For ordinary MCP tools, this is also at least their server's explicitly configured input limit. |
 | `profiles.<key>.features.code_mode_buffered_exec` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.code_mode_host` | <code>boolean or table</code> | _No description available._ |
 | `profiles.<key>.features.code_mode_host.disable_in_process_fallback` | <code>boolean</code> | Keep code mode fail-closed when the standalone host is unavailable. |
 | `profiles.<key>.features.code_mode_host.enabled` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.code_mode_interrupt` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.code_mode_only` | <code>boolean</code> | _No description available._ |
+| `profiles.<key>.features.code_mode_only_strict_3p_tools` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.code_mode_prewarm` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.codex_apps_mcp_2026_07_28` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.codex_git_commit` | <code>boolean</code> | _No description available._ |
@@ -860,6 +891,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `profiles.<key>.features.cwd_relative_turn_diffs` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.daemon_auto_start` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.default_mode_request_user_input` | <code>boolean</code> | _No description available._ |
+| `profiles.<key>.features.defer_mailbox_preemption` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.deferred_executor` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.deferred_tool_world_state` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.elevated_windows_sandbox` | <code>boolean</code> | _No description available._ |
@@ -877,11 +909,15 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `profiles.<key>.features.fast_mode` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.goals` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.guardian_approval` | <code>boolean</code> | _No description available._ |
+| `profiles.<key>.features.guardian_conversation_history_tools` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.guardian_enhanced_node_repl_transcripts` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.guardian_ext` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.guardian_node_repl_transcript_images` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.guardian_reuse_parent_compaction` | <code>boolean</code> | _No description available._ |
+| `profiles.<key>.features.guardian_root_handoff_context` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.guardianv2` | <code>boolean or table</code> | Options: User-configurable prompt, approval, and context settings for Guardian v2. |
+| `profiles.<key>.features.guardianv2.async_classifier_conversation_token_limit` | <code>integer</code> | Reset retained async history when the next request exceeds this token estimate. Defaults to 100,000. Fresh requests remain subject to the model's input limit. |
+| `profiles.<key>.features.guardianv2.async_classifier_mode` | <code>string (&quot;snapshot&quot;, &quot;conversation&quot;)</code> | Classifier experiment override. Otherwise use the model default, then snapshots. |
 | `profiles.<key>.features.guardianv2.classifier_instructions` | <code>string</code> | _No description available._ |
 | `profiles.<key>.features.guardianv2.enabled` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.guardianv2.free_guardian` | <code>boolean</code> | Legacy setting retained for config compatibility; the backend now controls Guardian billing. |
@@ -896,7 +932,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `profiles.<key>.features.guardianv2.review_scope.computer_use_only` | <code>boolean</code> | Restrict asynchronous classification and fast approvals to browser and computer-use tools. |
 | `profiles.<key>.features.guardianv2.review_scope.sandboxed_exec_commands` | <code>boolean</code> | Include sandboxed shell command calls in Guardian v2 classification. |
 | `profiles.<key>.features.guardianv2.review_threshold` | <code>number</code> | _No description available._ |
-| `profiles.<key>.features.guardianv2.thread_context` | <code>boolean</code> | Use thread-owned context for sync and async Guardian. Defaults to true. Independent of the Guardian v2 `enabled` toggle. |
+| `profiles.<key>.features.guardianv2.thread_context` | <code>boolean</code> | Deprecated and ignored; thread-owned Guardian context is always enabled. |
 | `profiles.<key>.features.guardianv2.transcript` | <code>table</code> | Bounds and optional sources for the Guardian v2 conversation transcript. |
 | `profiles.<key>.features.guardianv2.transcript.include_images` | <code>boolean</code> | Include recent screenshots from messages and configured tool outputs. |
 | `profiles.<key>.features.guardianv2.transcript.max_message_entry_tokens` | <code>integer</code> | _No description available._ |
@@ -905,6 +941,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `profiles.<key>.features.guardianv2.transcript.max_tool_entry_tokens` | <code>integer</code> | _No description available._ |
 | `profiles.<key>.features.guardianv2.transcript.max_tool_transcript_tokens` | <code>integer</code> | _No description available._ |
 | `profiles.<key>.features.guardianv2.transcript.sources` | <code>array&lt;string (&quot;tool_calls&quot;, &quot;tool_outputs&quot;, &quot;reasoning&quot;)&gt;</code> | _No description available._ |
+| `profiles.<key>.features.guardianv2_decisions_comparison` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.hooks` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.image_detail_original` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.image_generation` | <code>boolean</code> | _No description available._ |
@@ -915,16 +952,21 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `profiles.<key>.features.in_app_dictation` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.in_app_local_automation` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.in_app_updates` | <code>boolean</code> | _No description available._ |
+| `profiles.<key>.features.in_app_voice` | <code>boolean</code> | _No description available._ |
+| `profiles.<key>.features.incremental_tools` | <code>boolean</code> | _No description available._ |
+| `profiles.<key>.features.instant_interrupt` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.item_ids` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.js_repl` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.js_repl_tools_only` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.local_thread_store_compression` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.local_thread_store_shared_compression` | <code>boolean</code> | _No description available._ |
+| `profiles.<key>.features.login_shell_package_path` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.mcp_2026_07_28` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.mcp_oauth_refresh_coordination` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.memories` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.memory_tool` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.mentions_v2` | <code>boolean</code> | _No description available._ |
+| `profiles.<key>.features.model_catalog_in_context` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.multi_agent` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.multi_agent_mode` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.multi_agent_v2` | <code>boolean or table</code> | _No description available._ |
@@ -935,6 +977,11 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `profiles.<key>.features.multi_agent_v2.hide_spawn_agent_metadata` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.multi_agent_v2.max_concurrent_threads_per_session` | <code>integer</code> | _No description available._ |
 | `profiles.<key>.features.multi_agent_v2.max_wait_timeout_ms` | <code>integer</code> | _No description available._ |
+| `profiles.<key>.features.multi_agent_v2.message_board_in_memory` | <code>boolean</code> | Keep the message board in memory for a training session, including ephemeral sessions. |
+| `profiles.<key>.features.multi_agent_v2.message_board_remote` | <code>table</code> | Use a session-scoped remote board instead of local storage. |
+| `profiles.<key>.features.multi_agent_v2.message_board_remote.bearer_token` | <code>string</code> | Board credential supplied directly by a runtime config override. |
+| `profiles.<key>.features.multi_agent_v2.message_board_remote.bearer_token_env_var` | <code>string</code> | Read the credential from this environment variable instead of bearer_token. |
+| `profiles.<key>.features.multi_agent_v2.message_board_remote.url` | <code>string</code> | _No description available._ |
 | `profiles.<key>.features.multi_agent_v2.min_wait_timeout_ms` | <code>integer</code> | _No description available._ |
 | `profiles.<key>.features.multi_agent_v2.multi_agent_mode_hint_text` | <code>string</code> | _No description available._ |
 | `profiles.<key>.features.multi_agent_v2.non_code_mode_only` | <code>boolean</code> | _No description available._ |
@@ -945,6 +992,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `profiles.<key>.features.multi_agent_v2.usage_hint_enabled` | <code>boolean</code> | Deprecated compatibility field. Its value is ignored. |
 | `profiles.<key>.features.multi_agent_v2.usage_hint_text` | <code>string</code> | _No description available._ |
 | `profiles.<key>.features.multi_agent_v2.wait_agent_enabled` | <code>boolean</code> | Expose the multi-agent v2 `wait_agent` tool. |
+| `profiles.<key>.features.multi_agent_v2_dynamic_tools` | <code>boolean</code> | _No description available._ |
 | `profiles.<key>.features.network_proxy` | <code>boolean or table</code> | _No description available._ |
 | `profiles.<key>.features.network_proxy.allow_local_binding` | <code>boolean</code> | Permits local servers and direct host-loopback connections and skips the proxy's additional private-network destination checks. Proxy domain rules still apply. Defaults to true for MXC, which cannot enforce false; otherwise defaults to false. |
 | `profiles.<key>.features.network_proxy.allow_upstream_proxy` | <code>boolean</code> | _No description available._ |
@@ -1168,7 +1216,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `tui.alternate_screen` | <code>string (&quot;auto&quot;, &quot;always&quot;, &quot;never&quot;)</code> | Controls whether the TUI uses the terminal's alternate screen buffer.<br><br>- `auto` (default): Use alternate screen. - `always`: Always use alternate screen. - `never`: Never use alternate screen (inline mode only, preserves scrollback). |
 | `tui.animations` | <code>boolean</code> | Enable animations (welcome screen, shimmer effects, spinners). Defaults to `true`. |
 | `tui.auto_recap` | <code>boolean</code> | Generate automatic conversation recaps when the terminal is unfocused. Defaults to `true`. Disabling this leaves `/recap` available on demand. |
-| `tui.copy_on_select` | <code>string (&quot;auto&quot;, &quot;always&quot;, &quot;never&quot;)</code> | Copy selected transcript text when the mouse button is released. Defaults to `auto`: enabled in tmux/Zellij and in direct macOS terminals except Ghostty/Kitty. On other platforms, direct terminals default off except iTerm2/Terminal.app. |
+| `tui.copy_on_select` | <code>string (&quot;auto&quot;, &quot;always&quot;, &quot;never&quot;)</code> | Copy selected transcript text when the mouse button is released. Defaults to `auto`: enabled except in direct terminals known to forward their native copy shortcut (Ghostty 1.2+, Kitty on macOS, Windows Terminal, and VS Code on Windows). Unknown terminals, Ghostty without a recognized version, and tmux/Zellij default to copying. |
 | `tui.disable_paste_burst` | <code>boolean</code> | When true, disables burst-paste detection for typed input entirely. All characters are inserted as they are received, and no buffering or placeholder replacement will occur for fast keypress bursts. Overrides the legacy top-level `disable_paste_burst` setting. Defaults to `false`. |
 | `tui.effects` | <code>table</code> | Individual visual effects. Each also requires animations to be enabled. |
 | `tui.effects.effort` | <code>boolean</code> | Animate reasoning-effort changes in the composer and footer. |
@@ -1182,6 +1230,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `tui.keymap.agents` | <code>table</code> | Shortcuts specific to the shared agents overview. |
 | `tui.keymap.agents.archive` | <code>string or array&lt;string&gt;</code> | Archive the selected task and its child agents after confirmation. |
 | `tui.keymap.agents.delete` | <code>string or array&lt;string&gt;</code> | Permanently delete the selected task and its child agents after confirmation. |
+| `tui.keymap.agents.fork` | <code>string or array&lt;string&gt;</code> | Fork the selected conversation and open the new session. |
 | `tui.keymap.agents.hide` | <code>string or array&lt;string&gt;</code> | Hide the selected task until explicitly resumed or the TUI restarts. |
 | `tui.keymap.agents.new_task` | <code>string or array&lt;string&gt;</code> | Open a new session in the selected checkout. |
 | `tui.keymap.agents.new_worktree` | <code>string or array&lt;string&gt;</code> | Open a new session in a worktree from the project default branch. |
@@ -1347,6 +1396,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `tui.keymap.vim_text_object.word` | <code>string or array&lt;string&gt;</code> | Text object: word. |
 | `tui.model_availability_nux` | <code>table</code> | Startup tooltip availability NUX state persisted by the TUI. |
 | `tui.model_availability_nux.<key>` | <code>integer</code> | _No description available._ |
+| `tui.mouse_scroll_speed` | <code>number</code> | Mouse wheel speed multiplier for transcript scrolling, based on one row per event. Defaults to `1.0`. Positive fractional values slow scrolling; values above `1.0` speed it up. |
 | `tui.notification_condition` | <code>string (&quot;unfocused&quot;, &quot;always&quot;)</code> | Controls whether TUI notifications are delivered only when the terminal is unfocused or regardless of focus. Defaults to `unfocused`. |
 | `tui.notification_method` | <code>string (&quot;auto&quot;, &quot;osc9&quot;, &quot;bel&quot;)</code> | Notification method to use for terminal notifications. Defaults to `auto`. |
 | `tui.notifications` | <code>boolean or array&lt;string&gt;</code> | Enable desktop notifications from the TUI. Defaults to `true`. |
@@ -1360,6 +1410,7 @@ Generated from `codex-rs/core/config.schema.json`. Dynamic table keys are shown 
 | `tui.rendering.mermaid` | <code>boolean</code> | Render Mermaid code blocks as diagrams. |
 | `tui.rendering.tables` | <code>boolean</code> | Render pipe tables, including tables inside Markdown fences. |
 | `tui.resume_cwd` | <code>string (&quot;current&quot;, &quot;session&quot;)</code> | Working directory to use when resuming or forking a session. When unset, prompt if the current and session directories differ. |
+| `tui.right_click_paste` | <code>string (&quot;auto&quot;, &quot;on&quot;, &quot;off&quot;)</code> | Right-click text paste fallback. Defaults to `auto` (Windows/WSL/Linux). `on` also enables macOS; neither mode reads over SSH or in recognized VS Code terminals. This controls the fullscreen fallback, not the terminal's own paste binding. |
 | `tui.screen_reader_detection_done` | <code>boolean</code> | Records the one-time screen-reader detection attempt. Either value skips detection. |
 | `tui.session_picker_view` | <code>string (&quot;comfortable&quot;, &quot;dense&quot;)</code> | Preferred layout for resume/fork session picker results. |
 | `tui.show_server_version_notice` | <code>boolean</code> | Show informational notices about connected app server version differences. Defaults to `true`; this does not control compatibility errors or version status. |
